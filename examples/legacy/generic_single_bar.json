@@ -1,0 +1,20 @@
+{
+  "units": "mm",
+  "structure": {
+    "id": "PC-01",
+    "type": "pile_cap",
+    "dimensions": {"length": 2400, "width": 1800, "height": 900},
+    "origin": [1000, 2000, 0],
+    "rotation_deg": [0, 0, 0]
+  },
+  "bar": {
+    "id": "B1",
+    "shape": "straight",
+    "diameter": 16,
+    "dimensions": {"length": 1200},
+    "bend_radius": 0,
+    "position_local": [300, 400, 450],
+    "rotation_deg": [0, 0, 90]
+  },
+  "output": {"directory": "output/generic_single_bar", "step": true}
+}

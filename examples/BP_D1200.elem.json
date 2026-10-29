@@ -1,0 +1,241 @@
+{
+  "kind": "element",
+  "schema_version": 1,
+  "definition": {
+    "type": "bored_pile",
+    "type_version": 1,
+    "name": "Bored pile D1200",
+    "params": {
+      "diameter": 1200,
+      "depth_below_cof": 30000,
+      "cover": 75,
+      "cover_ref": "surface"
+    },
+    "materials": {
+      "concrete": {
+        "grade": "fc30",
+        "type": "readymix"
+      },
+      "steel": {
+        "grade": "fy420",
+        "type": "ulir"
+      }
+    },
+    "zones": [
+      {
+        "id": "Z0",
+        "side": "above_cof",
+        "length": 1280
+      },
+      {
+        "id": "Z1",
+        "length": 3000
+      },
+      {
+        "id": "Z2",
+        "length": 8000
+      },
+      {
+        "id": "Z3",
+        "length": "rest"
+      }
+    ],
+    "rebars": [
+      {
+        "id": "B1",
+        "shape": {
+          "code": "R20"
+        },
+        "diameter": 32,
+        "orientation": "vertical",
+        "extent": {
+          "zones": [
+            "Z0",
+            "Z1",
+            "Z2"
+          ]
+        },
+        "position": {
+          "ref": "concrete",
+          "face": "outer",
+          "offset_type": "clear",
+          "offset": "=cover+d_of('B2')"
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "polar",
+          "by": "count",
+          "count": 28,
+          "bundle": 2
+        }
+      },
+      {
+        "id": "B2",
+        "shape": {
+          "code": "R87"
+        },
+        "diameter": 16,
+        "orientation": "vertical",
+        "shape_params": {
+          "A": "=diameter-2*cover",
+          "B": {
+            "by_zone": {
+              "Z1": 75,
+              "Z2": 200,
+              "Z3": 300
+            }
+          }
+        },
+        "extent": {
+          "zones": [
+            "Z1",
+            "Z2",
+            "Z3"
+          ]
+        },
+        "position": {
+          "ref": "concrete",
+          "face": "outer",
+          "offset_type": "clear",
+          "offset": "=cover"
+        },
+        "arrangement": {
+          "mode": "single"
+        }
+      },
+      {
+        "id": "B4",
+        "shape": {
+          "code": "R20"
+        },
+        "diameter": 32,
+        "orientation": "vertical",
+        "extent": {
+          "zones": [
+            "Z3"
+          ],
+          "extend_start": "=40*d"
+        },
+        "position": {
+          "ref": "concrete",
+          "face": "outer",
+          "offset_type": "clear",
+          "offset": "=cover+d_of('B2')+32"
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "polar",
+          "by": "count",
+          "count": 28,
+          "bundle": 1
+        }
+      },
+      {
+        "id": "B5",
+        "shape": {
+          "code": "RING"
+        },
+        "diameter": 16,
+        "orientation": "horizontal",
+        "shape_params": {
+          "A": "=diameter-2*cover",
+          "lap": "=40*d"
+        },
+        "extent": {
+          "zones": [
+            "Z0"
+          ]
+        },
+        "position": {
+          "ref": "concrete",
+          "face": "outer",
+          "offset_type": "clear",
+          "offset": "=cover"
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "linear",
+          "axis": "z",
+          "by": "spacing",
+          "spacing": "=shape_param('B2','B','Z1')",
+          "range": {
+            "from": "=shape_param('B2','B','Z1')",
+            "to": "=zone_length('Z0')"
+          }
+        }
+      }
+    ]
+  },
+  "shapes": {
+    "R20": {
+      "code": "R20",
+      "version": 1,
+      "name": "Lurus",
+      "standard": "BS8666:20",
+      "params": [
+        {
+          "name": "A",
+          "label": "Panjang",
+          "from_extent": true
+        }
+      ],
+      "builder": {
+        "type": "straight",
+        "length": "=A"
+      },
+      "cut_length": "=A"
+    },
+    "R87": {
+      "code": "R87",
+      "version": 2,
+      "name": "Spiral",
+      "standard": "BS8666:87",
+      "params": [
+        {
+          "name": "A",
+          "label": "Diameter luar"
+        },
+        {
+          "name": "B",
+          "label": "Spasi (pitch)"
+        },
+        {
+          "name": "C",
+          "label": "Tinggi",
+          "from_extent": true
+        }
+      ],
+      "builder": {
+        "type": "helix",
+        "outer_diameter": "=A",
+        "pitch": "=B",
+        "height": "=C"
+      },
+      "cut_length": "=C/B*sqrt((pi*(A-d))*(pi*(A-d))+B*B)",
+      "notes": "R87 v2: B boleh skalar atau {by_zone:{Zid:pitch}}. Panjang potong = jumlah per zona L/pitch*sqrt((pi*(A-d))^2+pitch^2)."
+    },
+    "RING": {
+      "code": "RING",
+      "version": 1,
+      "name": "O-ring",
+      "standard": null,
+      "params": [
+        {
+          "name": "A",
+          "label": "Diameter luar"
+        },
+        {
+          "name": "lap",
+          "label": "Lewatan",
+          "default": "=40*d"
+        }
+      ],
+      "builder": {
+        "type": "ring",
+        "outer_diameter": "=A",
+        "lap": "=lap"
+      },
+      "cut_length": "=pi*(A-d)+lap"
+    }
+  }
+}

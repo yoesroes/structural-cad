@@ -1,0 +1,13 @@
+{
+  "name": "structural-cad-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --no-warnings --test src/**/*.test.ts",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

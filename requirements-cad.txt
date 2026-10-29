@@ -1,0 +1,4 @@
+# Ekspor STEP / DXF — prefer: pip install -e ".[cad]"
+-r requirements.txt
+cadquery>=2.4
+ezdxf>=1.1

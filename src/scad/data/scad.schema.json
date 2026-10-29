@@ -1,0 +1,1277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://structural-cad.local/schema/v1/scad.schema.json",
+  "title": "Structural CAD v1",
+  "description": "Pilih entri menurut 'kind': element | project | shape_library. Aturan lintas-referensi ada di validator, bukan di skema.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ElementFile"
+    },
+    {
+      "$ref": "#/$defs/ProjectFile"
+    },
+    {
+      "$ref": "#/$defs/ShapeLibraryFile"
+    }
+  ],
+  "$defs": {
+    "Num": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "pattern": "^="
+        }
+      ],
+      "description": "angka (mm/derajat) atau ekspresi berawalan '='"
+    },
+    "Id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$"
+    },
+    "NumOrByZone": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Num"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "by_zone": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/Num"
+              },
+              "minProperties": 1
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "by_zone"
+          ]
+        }
+      ],
+      "description": "angka/ekspresi atau peta pitch per zona"
+    },
+    "Materials": {
+      "type": "object",
+      "properties": {
+        "concrete": {
+          "type": "object",
+          "properties": {
+            "grade": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false
+        },
+        "steel": {
+          "type": "object",
+          "properties": {
+            "grade": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false
+    },
+    "Zone": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "side": {
+          "enum": [
+            "above_cof",
+            "below_cof"
+          ]
+        },
+        "length": {
+          "oneOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "const": "rest"
+            }
+          ]
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "length"
+      ]
+    },
+    "ShapeRef": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "code"
+      ]
+    },
+    "Extent": {
+      "type": "object",
+      "properties": {
+        "zones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "extend_start": {
+          "$ref": "#/$defs/Num"
+        },
+        "extend_end": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "zones"
+      ]
+    },
+    "PositionConcrete": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "const": "concrete"
+        },
+        "face": {
+          "enum": [
+            "outer",
+            "top",
+            "bottom",
+            "x-",
+            "x+",
+            "y-",
+            "y+",
+            "axis"
+          ]
+        },
+        "offset_type": {
+          "enum": [
+            "clear",
+            "center"
+          ]
+        },
+        "offset": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "face",
+        "offset"
+      ]
+    },
+    "PositionBar": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "const": "bar"
+        },
+        "bar": {
+          "$ref": "#/$defs/Id"
+        },
+        "relation": {
+          "enum": [
+            "above",
+            "below",
+            "inside",
+            "outside",
+            "left",
+            "right"
+          ]
+        },
+        "gap": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "bar",
+        "relation"
+      ]
+    },
+    "Position": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PositionConcrete"
+        },
+        {
+          "$ref": "#/$defs/PositionBar"
+        }
+      ]
+    },
+    "ArrangementSingle": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "const": "single"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ]
+    },
+    "ArrangementGroup": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "const": "group"
+        },
+        "pattern": {
+          "enum": [
+            "linear",
+            "polar"
+          ]
+        },
+        "axis": {
+          "enum": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "by": {
+          "enum": [
+            "count",
+            "spacing"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "spacing": {
+          "$ref": "#/$defs/Num"
+        },
+        "range": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/Num"
+            },
+            "to": {
+              "$ref": "#/$defs/Num"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false
+        },
+        "align": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "fit"
+          ]
+        },
+        "bundle": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "start_angle_deg": {
+          "type": "number"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "pattern",
+        "by"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "by": {
+                "const": "count"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "count"
+            ],
+            "not": {
+              "required": [
+                "spacing"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "by": {
+                "const": "spacing"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "spacing"
+            ],
+            "not": {
+              "required": [
+                "count"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pattern": {
+                "const": "linear"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "axis"
+            ]
+          }
+        }
+      ]
+    },
+    "Arrangement": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ArrangementSingle"
+        },
+        {
+          "$ref": "#/$defs/ArrangementGroup"
+        }
+      ]
+    },
+    "RebarItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "shape": {
+          "$ref": "#/$defs/ShapeRef"
+        },
+        "shape_params": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/NumOrByZone"
+          }
+        },
+        "diameter": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "steel": {
+          "$ref": "#/$defs/Materials/properties/steel"
+        },
+        "orientation": {
+          "enum": [
+            "vertical",
+            "horizontal",
+            "longitudinal",
+            "transverse"
+          ]
+        },
+        "facing": {
+          "enum": [
+            "inward",
+            "outward",
+            "up",
+            "down",
+            "+x",
+            "-x",
+            "+y",
+            "-y"
+          ]
+        },
+        "extent": {
+          "$ref": "#/$defs/Extent"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "arrangement": {
+          "$ref": "#/$defs/Arrangement"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "shape",
+        "diameter",
+        "orientation",
+        "extent",
+        "position",
+        "arrangement"
+      ]
+    },
+    "BoredPileParams": {
+      "type": "object",
+      "properties": {
+        "diameter": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "depth_below_cof": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "cover": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cover_ref": {
+          "enum": [
+            "surface",
+            "centerline"
+          ]
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "diameter",
+        "depth_below_cof",
+        "cover"
+      ]
+    },
+    "PileCapParams": {
+      "type": "object",
+      "properties": {
+        "length": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "cover_top": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cover_bottom": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cover_side_x": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cover_side_y": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cover_ref": {
+          "enum": [
+            "surface",
+            "centerline"
+          ]
+        },
+        "lap_ratio_D": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "lap_mid_height": {
+          "type": "number"
+        },
+        "lap_nesting": {
+          "enum": [
+            "inside_edge_bars",
+            "bottom_inside",
+            "top_inside"
+          ]
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "length",
+        "width",
+        "height",
+        "cover_top",
+        "cover_bottom",
+        "cover_side_x",
+        "cover_side_y"
+      ]
+    },
+    "ElementDefinition": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "type_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        },
+        "materials": {
+          "$ref": "#/$defs/Materials"
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Zone"
+          }
+        },
+        "rebars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RebarItem"
+          }
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name",
+        "params",
+        "rebars"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bored_pile"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/BoredPileParams"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "pile_cap"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/PileCapParams"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Builder": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "straight"
+            },
+            "length": {
+              "$ref": "#/$defs/Num"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "length"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "polyline_outside"
+            },
+            "points": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "$ref": "#/$defs/Num"
+                }
+              }
+            },
+            "closed": {
+              "type": "boolean"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "points"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "helix"
+            },
+            "outer_diameter": {
+              "$ref": "#/$defs/Num"
+            },
+            "pitch": {
+              "$ref": "#/$defs/Num"
+            },
+            "height": {
+              "$ref": "#/$defs/Num"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "outer_diameter",
+            "pitch",
+            "height"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ring"
+            },
+            "outer_diameter": {
+              "$ref": "#/$defs/Num"
+            },
+            "lap": {
+              "$ref": "#/$defs/Num"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "outer_diameter",
+            "lap"
+          ]
+        }
+      ]
+    },
+    "ShapeParam": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "label": {
+          "type": "string"
+        },
+        "default": {
+          "$ref": "#/$defs/Num"
+        },
+        "from_extent": {
+          "type": "boolean"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "Hook": {
+      "type": "object",
+      "properties": {
+        "end": {
+          "enum": [
+            "start",
+            "end"
+          ]
+        },
+        "angle_deg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 180
+        },
+        "tail": {
+          "$ref": "#/$defs/Num"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "end",
+        "angle_deg",
+        "tail"
+      ]
+    },
+    "ShapeDef": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "standard": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "params": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ShapeParam"
+              }
+            },
+            "builder": {
+              "$ref": "#/$defs/Builder"
+            },
+            "cut_length": {
+              "type": "string",
+              "pattern": "^="
+            },
+            "cut_tolerance_per_bend": {
+              "$ref": "#/$defs/Num"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "version",
+            "name",
+            "params",
+            "builder"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "standard": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "derived_from": {
+              "type": "string"
+            },
+            "override": {
+              "type": "object"
+            },
+            "add_hooks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Hook"
+              }
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "version",
+            "name",
+            "derived_from"
+          ]
+        }
+      ]
+    },
+    "Instance": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "rotation_deg": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "overrides": {
+          "type": "object",
+          "properties": {
+            "params": {
+              "type": "object",
+              "properties": {
+                "depth_below_cof": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "patternProperties": {
+                "^x_": {}
+              },
+              "additionalProperties": false
+            },
+            "zone_lengths": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/Id"
+              },
+              "additionalProperties": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "x",
+        "y"
+      ]
+    },
+    "Source": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "added_at": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "hash",
+            "added_at"
+          ]
+        }
+      ]
+    },
+    "Group": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/Source"
+            },
+            "data": {
+              "$ref": "#/$defs/ElementDefinition"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "data"
+          ]
+        },
+        "naming": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string"
+            },
+            "start": {
+              "type": "integer"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "pattern"
+          ]
+        },
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "params": {
+              "type": "object"
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false
+        },
+        "instances": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Instance"
+          },
+          "minItems": 1
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "definition",
+        "instances"
+      ]
+    },
+    "ElementFile": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "element"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "definition": {
+          "$ref": "#/$defs/ElementDefinition"
+        },
+        "shapes": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ShapeDef"
+          }
+        },
+        "meta": {
+          "type": "object"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "schema_version",
+        "definition"
+      ]
+    },
+    "ShapeLibraryFile": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "shape_library"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "shapes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeDef"
+          }
+        },
+        "meta": {
+          "type": "object"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "schema_version",
+        "shapes"
+      ]
+    },
+    "ProjectFile": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "project"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "project": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/Id"
+            },
+            "name": {
+              "type": "string"
+            },
+            "datum": {
+              "type": "object",
+              "properties": {
+                "cof_elevation": {
+                  "type": "number"
+                }
+              },
+              "patternProperties": {
+                "^x_": {}
+              },
+              "additionalProperties": false
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name"
+          ]
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "cover_ref": {
+              "enum": [
+                "surface",
+                "centerline"
+              ]
+            },
+            "bend_inside_radius": {
+              "type": "object",
+              "properties": {
+                "default": {
+                  "$ref": "#/$defs/Num"
+                },
+                "by_diameter": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/$defs/Num"
+                  }
+                }
+              },
+              "patternProperties": {
+                "^x_": {}
+              },
+              "additionalProperties": false
+            },
+            "rules": {
+              "type": "object",
+              "properties": {
+                "min_clear_spacing": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "min_cover": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "max_spiral_spacing": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "patternProperties": {
+                "^x_": {}
+              },
+              "additionalProperties": false
+            }
+          },
+          "patternProperties": {
+            "^x_": {}
+          },
+          "additionalProperties": false
+        },
+        "materials": {
+          "$ref": "#/$defs/Materials"
+        },
+        "shapes": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ShapeDef"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Group"
+          }
+        },
+        "meta": {
+          "type": "object"
+        }
+      },
+      "patternProperties": {
+        "^x_": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "schema_version",
+        "project",
+        "groups"
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+# T04 — Penyelesai zona
+Baca `00_KONTEKS.md` (butir 5) dulu.
+**Tujuan:** `core/scad/zones.py`: `resolve_zones(zones, depth_below_cof, zone_lengths=None) -> list[ResolvedZone]`, `ZoneError` (atribut `code`), `ResolvedZone`.
+**Aturan:** urutan hasil = urutan masukan. Zona `above_cof` bertumpuk ke atas dari z=0 (`z_top` positif); zona `below_cof` bertumpuk ke bawah dari z=0 (`z_top` lebih besar dari `z_bottom`, keduanya <= 0). `zone_lengths` menimpa panjang zona tetap menurut ID (ID tak dikenal -> `ZoneError` kode `REF_MISSING`). Zona `"rest"` = `depth_below_cof` dikurangi jumlah zona below_cof tetap. Jumlah zona below_cof tetap lebih besar dari kedalaman -> `ZoneError` kode `ZONE_DEPTH_SHORT` dengan pesan yang menyebut angkanya. `"rest"` yang tidak di zona below_cof terakhir atau lebih dari satu -> `ZONE_REST_POS`. Bila `rest` bernilai <= 0 -> `ZONE_DEPTH_SHORT`.
+**Berkas keluaran:** `core/scad/zones.py`, `core/tests/test_zones.py`.
+**Uji wajib:** untuk 9 pile di `examples/P1.project.json` (kedalaman dan `zone_lengths` dari default grup + `overrides`), hasil harus sama dengan `examples/expected_zones.P1.json` (Z3: P1-1=19000, P1-2=15000, P1-5=17500, P1-8=16000). Plus: kedalaman 10000 pada definisi contoh -> `ZONE_DEPTH_SHORT`; dua "rest" -> `ZONE_REST_POS`; hanya zona above_cof; tanpa "rest" (jumlah tetap = kedalaman).

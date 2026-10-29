@@ -1,0 +1,3 @@
+# Pengembangan & uji — prefer: pip install -e ".[dev]"
+-r requirements.txt
+pytest>=7.0

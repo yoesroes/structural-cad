@@ -1,0 +1,130 @@
+{
+  "kind": "shape_library",
+  "schema_version": 1,
+  "shapes": [
+    {
+      "code": "R20",
+      "version": 1,
+      "name": "Lurus",
+      "standard": "BS8666:20",
+      "params": [
+        {
+          "name": "A",
+          "label": "Panjang",
+          "from_extent": true
+        }
+      ],
+      "builder": {
+        "type": "straight",
+        "length": "=A"
+      },
+      "cut_length": "=A"
+    },
+    {
+      "code": "R87",
+      "version": 2,
+      "name": "Spiral",
+      "standard": "BS8666:87",
+      "params": [
+        {
+          "name": "A",
+          "label": "Diameter luar"
+        },
+        {
+          "name": "B",
+          "label": "Spasi (pitch)"
+        },
+        {
+          "name": "C",
+          "label": "Tinggi",
+          "from_extent": true
+        }
+      ],
+      "builder": {
+        "type": "helix",
+        "outer_diameter": "=A",
+        "pitch": "=B",
+        "height": "=C"
+      },
+      "cut_length": "=C/B*sqrt((pi*(A-d))*(pi*(A-d))+B*B)",
+      "notes": "R87 v2: B boleh skalar atau {by_zone:{Zid:pitch}}. Panjang potong = jumlah per zona L/pitch*sqrt((pi*(A-d))^2+pitch^2)."
+    },
+    {
+      "code": "RING",
+      "version": 1,
+      "name": "O-ring",
+      "standard": null,
+      "params": [
+        {
+          "name": "A",
+          "label": "Diameter luar"
+        },
+        {
+          "name": "lap",
+          "label": "Lewatan",
+          "default": "=40*d"
+        }
+      ],
+      "builder": {
+        "type": "ring",
+        "outer_diameter": "=A",
+        "lap": "=lap"
+      },
+      "cut_length": "=pi*(A-d)+lap"
+    },
+    {
+      "code": "37",
+      "version": 1,
+      "name": "L",
+      "standard": "BS8666:37",
+      "params": [
+        {
+          "name": "A",
+          "label": "Kaki A"
+        },
+        {
+          "name": "B",
+          "label": "Kaki B"
+        }
+      ],
+      "builder": {
+        "type": "polyline_outside",
+        "points": [
+          [
+            "=B",
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            "=A"
+          ]
+        ]
+      },
+      "cut_length": "=A+B-0.5*r-d",
+      "cut_tolerance_per_bend": "=0.25*d"
+    },
+    {
+      "code": "X-HOOK-135-90",
+      "version": 1,
+      "name": "Lurus, kait 135 (6d) dan 90 (12d)",
+      "standard": null,
+      "derived_from": "R20",
+      "add_hooks": [
+        {
+          "end": "start",
+          "angle_deg": 135,
+          "tail": "=6*d"
+        },
+        {
+          "end": "end",
+          "angle_deg": 90,
+          "tail": "=12*d"
+        }
+      ]
+    }
+  ]
+}

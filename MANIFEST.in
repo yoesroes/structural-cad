@@ -1,0 +1,18 @@
+# Sumber non-Python untuk source distribution
+include README.md
+include CHANGELOG_GENERIC.md
+include CHANGELOG_UI.md
+include pyproject.toml
+include schemas/scad.schema.json
+
+recursive-include examples *.json
+recursive-include docs *.md *.html
+recursive-include tasks *.md
+recursive-include scripts *.sh
+recursive-include tools *.py
+recursive-include src/scad/data *.json
+recursive-include src/scad_ui/static *
+recursive-include src/scad_engine/examples *.json
+recursive-include web *
+
+global-exclude __pycache__ *.py[cod] .pytest_cache

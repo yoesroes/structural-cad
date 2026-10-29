@@ -1,0 +1,163 @@
+{
+  "cases": [
+    {
+      "id": "set_new_depth",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "value": 27000
+      },
+      "expected_overrides": {
+        "params": {
+          "depth_below_cof": 27000
+        }
+      },
+      "expected_inverse": {
+        "op": "reset_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-1"
+      }
+    },
+    {
+      "id": "set_same_as_default",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "value": 30000
+      },
+      "expected_overrides": null,
+      "expected_inverse": null
+    },
+    {
+      "id": "set_zone_z2",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_zone_length",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "zone": "Z2",
+        "value": 7000
+      },
+      "expected_overrides": {
+        "zone_lengths": {
+          "Z2": 7000
+        }
+      },
+      "expected_inverse": {
+        "op": "reset_pile_zone_length",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "zone": "Z2"
+      }
+    },
+    {
+      "id": "reset_existing_depth",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "reset_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-2"
+      },
+      "expected_overrides": null,
+      "expected_inverse": {
+        "op": "set_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-2",
+        "value": 26000
+      }
+    },
+    {
+      "id": "reset_missing_depth",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "reset_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-1"
+      },
+      "expected_overrides": null,
+      "expected_inverse": null
+    },
+    {
+      "id": "value_zero_error",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "value": 0
+      },
+      "expect_error": true
+    },
+    {
+      "id": "value_negative_error",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "value": -5
+      },
+      "expect_error": true
+    },
+    {
+      "id": "pile_missing_error",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_depth",
+        "group": "BP-P1",
+        "pile": "P9-99",
+        "value": 1000
+      },
+      "expect_error": true
+    },
+    {
+      "id": "zone_missing_error",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_zone_length",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "zone": "ZX",
+        "value": 100
+      },
+      "expect_error": true
+    },
+    {
+      "id": "roundtrip_inverse",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_depth",
+        "group": "BP-P1",
+        "pile": "P1-3",
+        "value": 25000
+      },
+      "check_roundtrip": true
+    },
+    {
+      "id": "reset_zone_on_p1_8",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "reset_pile_zone_length",
+        "group": "BP-P1",
+        "pile": "P1-8",
+        "zone": "Z2"
+      },
+      "expected_overrides": {
+        "params": {
+          "depth_below_cof": 26000
+        }
+      },
+      "expected_inverse": {
+        "op": "set_pile_zone_length",
+        "group": "BP-P1",
+        "pile": "P1-8",
+        "zone": "Z2",
+        "value": 7000
+      }
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Layar utama</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.t{font:13px/1.4 system-ui,Segoe UI,sans-serif;color:#1d2330}
+.m{padding:6px 12px;color:#1d2330}
+.h{font-weight:600;font-size:11px;letter-spacing:.06em;color:#5a6270;text-transform:uppercase;margin:12px 0 6px}
+.r{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #eceef2}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-size:11px;color:#5a6270;padding:5px 10px;border-bottom:1px solid #d9dce1;background:#f4f5f7}
+td{padding:5px 10px;border-bottom:1px solid #eceef2}
+.ov{color:#8a4b00;font-weight:600}
+.fm{display:block;width:100%;box-sizing:border-box;border:1px solid #b9bfc9;border-radius:4px;padding:4px 6px;font:inherit;background:#fff}
+.mi{padding:5px 14px;color:#1d2330}
+</style>
+</helmet>
+<div class="t" style="position:relative;min-height:900px;display:flex;flex-direction:column;background:#f4f5f7">
+<div style="display:flex;align-items:center;background:#fff;border-bottom:1px solid #d9dce1">
+<span class="m" style="background:#e3ebfa;font-weight:600">File</span><span class="m">Edit</span><span class="m">Elemen</span><span class="m">Tulangan</span><span class="m">Periksa</span><span class="m">Ekspor</span><span class="m">Bantuan</span>
+<span style="margin-left:auto;padding-right:14px;color:#5a6270">Project P1 · Cof +12,35 m · mm</span>
+</div>
+<div style="display:flex;gap:2px;padding:6px 8px 0;background:#e9ebef">
+<span style="padding:6px 14px;background:#fff;border:1px solid #d9dce1;border-bottom:0;border-radius:4px 4px 0 0;font-weight:600">Project P1</span>
+<span style="padding:6px 14px;color:#5a6270">BP_D1200.elem</span>
+</div>
+<div style="display:grid;grid-template-columns:240px 1fr 310px;flex:1;min-height:500px;border-top:1px solid #d9dce1">
+<div style="background:#fff;border-right:1px solid #d9dce1;padding:10px 12px">
+<div class="h" style="margin-top:0">Pohon</div>
+<div style="font-weight:600">Project P1</div>
+<div style="padding-left:14px;font-weight:600;background:#e3ebfa;margin:2px -12px;padding-right:12px;padding-top:2px;padding-bottom:2px;padding-left:26px">BP-P1 · bored pile (9)</div>
+<div style="padding-left:40px">P1-1</div><div style="padding-left:40px">P1-2 <span class="ov">● 26000</span></div><div style="padding-left:40px">P1-3</div><div style="padding-left:40px;color:#5a6270">… P1-9</div>
+<div style="padding-left:14px;margin-top:4px">Pile cap</div>
+<div style="padding-left:14px;color:#5a6270">Pier (belum ada)</div>
+</div>
+<div style="display:flex;flex-direction:column;background:#fbfbfc">
+<div style="display:flex;gap:2px;padding:8px 12px;border-bottom:1px solid #d9dce1;background:#fff">
+<button style="border:1px solid #b9bfc9;background:#fff;padding:4px 12px;border-radius:4px">3D</button>
+<button style="border:1px solid #1f5fd0;background:#e3ebfa;padding:4px 12px;border-radius:4px;font-weight:600">Potongan</button>
+<button style="border:1px solid #b9bfc9;background:#fff;padding:4px 12px;border-radius:4px">Lembar</button>
+<span style="margin-left:auto;color:#5a6270;padding-top:4px">Pile P1-1 · kedalaman 30000 mm</span>
+</div>
+<svg viewBox="0 0 640 470" style="width:100%;height:470px" role="img" aria-label="Tampak dan potongan bored pile P1-1 dengan zona">
+<g stroke="#1d2330" fill="none" stroke-width="1.3"><rect x="150" y="30" width="60" height="420"/></g>
+<g fill="#e3ebfa" stroke="#9db6e8"><rect x="150" y="30" width="60" height="30"/></g>
+<g stroke="#1f5fd0" stroke-width="1"><line x1="150" y1="60" x2="210" y2="60"/><line x1="150" y1="130" x2="210" y2="130"/><line x1="150" y1="260" x2="210" y2="260"/></g>
+<g font-size="12" fill="#1d2330"><text x="225" y="50">Z0 +1300 (di atas Cof)</text><text x="225" y="100">Z1 3000 · B1 · B2 D16-75</text><text x="225" y="200">Z2 8000 · B1 · B3 D16-200</text><text x="225" y="360">Z3 sisa 19000 (fleksibel)</text><text x="60" y="64" fill="#1f5fd0">Cof</text></g>
+<g stroke="#1d2330" fill="none" stroke-width="1.3"><circle cx="500" cy="170" r="70"/></g>
+<g stroke="#2a7a4b" fill="none"><circle cx="500" cy="170" r="62"/></g>
+<g fill="#b3261e"><circle cx="500" cy="115" r="4"/><circle cx="539" cy="131" r="4"/><circle cx="555" cy="170" r="4"/><circle cx="539" cy="209" r="4"/><circle cx="500" cy="225" r="4"/><circle cx="461" cy="209" r="4"/><circle cx="445" cy="170" r="4"/><circle cx="461" cy="131" r="4"/></g>
+<text x="440" y="270" font-size="12" fill="#1d2330">Potongan Z1: 2×28 D32, spiral D16-75</text>
+<text x="440" y="290" font-size="12" fill="#5a6270">Skala 1:25 · garis = sumbu batang</text>
+</svg>
+</div>
+<div style="background:#fff;border-left:1px solid #d9dce1;padding:10px 14px">
+<div class="h" style="margin-top:0">Grup BP-P1</div>
+<div class="r"><span>Diameter</span><span>1200 mm</span></div><div class="r"><span>Selimut (ke permukaan)</span><span>75 mm</span></div><div class="r"><span>Beton / Baja</span><span>fc30 / fy420 ulir</span></div>
+<div class="h">Tulangan</div>
+<div class="r"><span>B1 Lurus D32 · 2×28</span><span>Z0–Z2</span></div><div class="r"><span>B2 Spiral D16 @75</span><span>Z1</span></div><div class="r"><span>B3 O-ring D16 @200</span><span>Z2</span></div>
+<button style="margin-top:8px;border:1px solid #1f5fd0;background:#fff;color:#1f5fd0;padding:5px 12px;border-radius:4px;font-weight:600">+ Tambah tulangan</button>
+<div class="h">Pemeriksaan</div>
+<div class="r"><span>Jumlah vs rumus</span><span style="color:#1b6b3a;font-weight:600">Sesuai</span></div><div class="r"><span>Spasi bersih</span><span class="ov">2 peringatan</span></div><div class="r"><span>Bentrok</span><span style="color:#1b6b3a;font-weight:600">0</span></div>
+</div>
+</div>
+<div style="background:#fff;border-top:1px solid #d9dce1">
+<table><tr><th>ID</th><th>X (mm)</th><th>Y (mm)</th><th>Kedalaman dari Cof</th><th>Zona fleksibel Z3</th><th>Status</th></tr>
+<tr><td>P1-1</td><td>-3000</td><td>-3000</td><td>30000 (grup)</td><td>19000</td><td>Sesuai</td></tr>
+<tr><td>P1-2</td><td>0</td><td>-3000</td><td class="ov">26000 ●</td><td>15000</td><td>Sesuai</td></tr>
+<tr><td>P1-3</td><td>3000</td><td>-3000</td><td>30000 (grup)</td><td>19000</td><td>Sesuai</td></tr></table>
+<div style="padding:6px 12px;background:#1d2330;color:#e8eaee;font-family:ui-monospace,Consolas,monospace">&gt; SET P1-2 DEPTH 26000   <span style="color:#9fb0cc">— nilai ini menimpa grup</span></div>
+</div>
+<div style="position:absolute;left:0;top:32px;width:290px;background:#fff;border:1px solid #b9bfc9;box-shadow:0 6px 18px rgba(0,0,0,.15);padding:4px 0">
+<div class="h" style="margin:6px 14px 2px">Project</div><div class="mi">Baru…</div><div class="mi">Buka…</div><div class="mi">Simpan</div><div class="mi">Simpan Sebagai…</div>
+<div class="h" style="margin:8px 14px 2px;border-top:1px solid #eceef2;padding-top:8px">File Elemen</div><div class="mi">Baru…</div><div class="mi">Buka…</div><div class="mi">Simpan</div><div class="mi">Simpan Sebagai…</div>
+<div style="border-top:1px solid #eceef2;margin-top:6px"></div><div class="mi">Tambahkan File Elemen ke Project…</div><div class="mi">Perbarui Definisi dari File…</div><div class="mi">Keluar</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

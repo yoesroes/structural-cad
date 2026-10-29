@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scad"
+version = "0.1.0"
+description = "Structural CAD lokal: dokumen project/element (scad) + mesin geometri (scad_engine) + UI (scad_ui)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+dependencies = [
+    "jsonschema>=4.0",
+]
+
+[project.optional-dependencies]
+cad = [
+    "cadquery>=2.4",
+    "ezdxf>=1.1",
+]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+scad-ui = "scad_ui.server:main"
+scad-engine = "scad_engine.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["scad*", "scad_engine*", "scad_ui*", "pilecap_rebar*"]
+
+[tool.setuptools.package-data]
+scad = ["data/*.json"]
+scad_engine = ["examples/*.json"]
+scad_ui = ["static/*.html", "static/*.css", "static/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

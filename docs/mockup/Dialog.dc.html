@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Tambah tulangan</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.t{font:13px/1.4 system-ui,Segoe UI,sans-serif;color:#1d2330}
+.h{font-weight:600;font-size:11px;letter-spacing:.06em;color:#5a6270;text-transform:uppercase;margin:12px 0 6px}
+.fm{display:block;width:100%;box-sizing:border-box;border:1px solid #b9bfc9;border-radius:4px;padding:5px 7px;font:inherit;background:#fff}
+.lb{display:block;color:#5a6270;font-size:12px;margin:8px 0 3px}
+</style>
+</helmet>
+<div class="t" style="width:760px;height:640px;box-sizing:border-box;background:#fff;border:1px solid #b9bfc9;display:flex;flex-direction:column">
+<div style="padding:14px 18px;border-bottom:1px solid #d9dce1;font-weight:600;font-size:15px">Tambah tulangan · Grup BP-P1</div>
+<div style="display:flex;gap:8px;padding:10px 18px;color:#5a6270"><span>1 Bentuk ✓</span><span>›</span><span>2 Parameter</span><span>›</span><span>3 Posisi dan susunan</span></div>
+<div style="display:grid;grid-template-columns:230px 1fr;gap:18px;padding:0 18px;flex:1">
+<div>
+<div class="h" style="margin-top:0">Bentuk (library)</div>
+<div style="padding:6px 8px;color:#1d2330">R20 · Lurus</div>
+<div style="padding:6px 8px;background:#e3ebfa;font-weight:600;border:1px solid #1f5fd0;border-radius:4px">R87 · Spiral</div>
+<div style="padding:6px 8px">RING · O-ring</div>
+<div style="padding:6px 8px;color:#5a6270">Dari BS 8666… (nanti)</div>
+<svg viewBox="0 0 200 150" style="width:100%;margin-top:10px" role="img" aria-label="Pratinjau spiral"><g fill="none" stroke="#2a7a4b" stroke-width="2"><path d="M60 20 Q140 28 140 38 Q60 46 60 56 Q140 64 140 74 Q60 82 60 92 Q140 100 140 110 Q60 118 60 128"/></g><text x="8" y="146" font-size="11" fill="#5a6270">A diameter · B spasi · C tinggi</text></svg>
+</div>
+<div>
+<div class="h" style="margin-top:0">Parameter</div>
+<label class="lb" for="d">Diameter batang (mm)</label><input id="d" class="fm" value="16">
+<label class="lb" for="s">Spasi / pitch (mm)</label><input id="s" class="fm" value="75">
+<div class="h">Posisi dan susunan</div>
+<label class="lb" for="z">Zona</label><input id="z" class="fm" value="Z1 (3000 mm di bawah Cof)">
+<label class="lb" for="o">Orientasi</label><input id="o" class="fm" value="Vertikal (sumbu pile)">
+<label class="lb" for="p">Posisi terhadap beton</label><input id="p" class="fm" value="Di dalam muka luar, selimut 75 ke permukaan">
+<label class="lb" for="g">Susunan</label><input id="g" class="fm" value="Grup · spasi 75 · dari 0 sampai ujung zona">
+<div style="margin-top:12px;padding:8px 10px;background:#f4f5f7;border:1px solid #d9dce1;border-radius:4px">Panjang potong 457,9 m · 12 kali putar per zona 1 m <br><span style="color:#8a4b00">Spasi bersih terhadap B1: 71 mm (batas proyek 75 mm)</span></div>
+</div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #d9dce1">
+<button style="border:1px solid #b9bfc9;background:#fff;padding:6px 16px;border-radius:4px">Batal</button>
+<button style="border:1px solid #1f5fd0;background:#1f5fd0;color:#fff;padding:6px 16px;border-radius:4px;font-weight:600">Tambahkan</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":760,"height":640}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

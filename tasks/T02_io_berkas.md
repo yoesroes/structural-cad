@@ -1,0 +1,7 @@
+# T02 — Kanonik, hash, dan I/O berkas
+Baca `00_KONTEKS.md` dulu.
+**Tujuan:** `core/scad/io/canonical.py` dan `core/scad/io/files.py` sesuai kontrak.
+**Aturan canonical_json:** kunci terurut, `separators=(",",":")`, `ensure_ascii=False`, float bernilai bulat dinormalkan ke int (1200.0 -> 1200). `sha256_of(obj)` = `"sha256:" + hex` dari UTF-8 canonical_json.
+**Aturan files:** `load_document` membaca UTF-8, memastikan dict dengan `kind` di {project, element, shape_library} dan `schema_version` integer; versi lebih besar dari `SCHEMA_VERSION` -> `SchemaVersionError`; sediakan `MIGRATIONS: dict[int, callable]` (kosong) yang diterapkan berurutan untuk versi lebih lama. `save_document`: tulis ke file sementara di folder yang sama lalu `os.replace` (atomik); bila berkas lama ada, salin dulu ke `<nama>.bak`; indentasi 2 spasi, urutan kunci dipertahankan, `ensure_ascii=False`, diakhiri newline; bila gagal, berkas lama utuh dan tidak ada sisa `.tmp`.
+**Berkas keluaran:** kedua berkas di atas, `core/tests/test_io.py`.
+**Uji wajib:** `sha256_of(definition)` dari `examples/BP_D1200.elem.json` = `sha256:f13005c8beb2766f5b1c1fc48a0256300c93d5903a872b75b795c0d3ca06fccd` dan sama dengan `groups[0].definition.source.hash` di `examples/P1.project.json`; hash tidak berubah bila urutan kunci diubah; muat-simpan-muat menghasilkan isi sama; kegagalan `os.replace` (monkeypatch) tidak merusak berkas lama; simpan kedua kali membuat `.bak`; `schema_version: 2` -> `SchemaVersionError`.

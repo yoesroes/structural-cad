@@ -1,0 +1,98 @@
+{
+  "units": "mm",
+  "pilecap": {
+    "length": 8400,
+    "width": 8400,
+    "height": 2500
+  },
+  "cover": {
+    "top": 100,
+    "side_longitudinal": 100,
+    "side_transverse": 100,
+    "bottom_from_working_slab": 250,
+    "reference": "centerline"
+  },
+  "working_slab": {
+    "top_elevation": 0
+  },
+  "reinforcement": {
+    "P1": {
+      "diameter": 19,
+      "spacing": 100,
+      "direction": "transverse",
+      "shape": "U_rectangular",
+      "bend_angle_deg": 90
+    },
+    "P2": {
+      "diameter": 19,
+      "spacing": 100,
+      "direction": "transverse",
+      "shape": "U_rectangular",
+      "bend_angle_deg": 90
+    },
+    "P3": {
+      "diameter": 19,
+      "spacing": 100,
+      "direction": "longitudinal",
+      "shape": "U_rectangular",
+      "bend_angle_deg": 90
+    },
+    "P4": {
+      "diameter": 19,
+      "spacing": 100,
+      "direction": "longitudinal",
+      "shape": "U_rectangular",
+      "bend_angle_deg": 90
+    },
+    "P5": {
+      "diameter": 16,
+      "spacing_x": 600,
+      "spacing_y": 600,
+      "shape": "vertical_tie_two_hooks",
+      "hook_angle_deg": 135,
+      "inset_from_main_rebar_bounds": 600,
+      "hook_bend_diameter_db": 6,
+      "hook_tail_length_diameters": 10
+    },
+    "P6": {
+      "diameter": 16,
+      "spacing": 300,
+      "shape": "side_distribution_two_hooks",
+      "on_all_sides": true,
+      "hook_a_angle_deg": 135,
+      "hook_a_tail_db": 6,
+      "hook_b_angle_deg": 90,
+      "hook_b_tail_db": 12,
+      "hook_bend_diameter_db": 6,
+      "levels_alignment": "fit_between_mats",
+      "stagger_corner_levels": true
+    },
+    "lap_splice": {
+      "ratio_D": 40,
+      "placement_reference": "mid_height",
+      "mid_height_elevation_from_bottom": 1250,
+      "nesting": "inside_edge_bars"
+    }
+  },
+  "bend_radii": {
+    "D19": 38,
+    "D16": 32,
+    "editable_note": "Editable here; preliminary defaults only. Verify against applicable reinforcement detailing rules."
+  },
+  "model_options": {
+    "show_concrete": true,
+    "show_reinforcement": true,
+    "rebar_geometry": "sweep"
+  },
+  "export": {
+    "step_full": "output/pilecap_full_model.step",
+    "step_rebar": "output/pilecap_reinforcement.step",
+    "stl_full": "output/pilecap_full_model.stl",
+    "dxf_sections": "output/pilecap_sections_2d.dxf"
+  },
+  "drawing_2d": {
+    "schematic_scale": 1.0,
+    "view_gap": 1200,
+    "note": "Both sections are schematic, modelspace coordinates in mm, shown 1:1."
+  }
+}

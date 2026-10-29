@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Structural CAD · Project P1</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<!-- MENU BAR -->
+<div id="menu-bar">
+  <span class="menu-item active" data-menu="file">File</span>
+  <span class="menu-item">Edit</span>
+  <span class="menu-item">Elemen</span>
+  <span class="menu-item">Tulangan</span>
+  <span class="menu-item">Periksa</span>
+  <span class="menu-item">Ekspor</span>
+  <span class="menu-item">Bantuan</span>
+  <span class="menu-right">Project P1 · Cof +12,35 m · mm</span>
+
+  <div class="dropdown" id="menu-file">
+    <div class="h">Project</div>
+    <div class="mi" onclick="action('new-project')">Baru…</div>
+    <div class="mi" onclick="action('open-project')">Buka…</div>
+    <div class="mi" onclick="action('save-project')">Simpan</div>
+    <div class="mi" onclick="action('save-project-as')">Simpan Sebagai…</div>
+    <div class="h sep">File Elemen</div>
+    <div class="mi">Baru…</div>
+    <div class="mi">Buka…</div>
+    <div class="mi">Simpan</div>
+    <div class="mi">Simpan Sebagai…</div>
+    <div class="divider"></div>
+    <div class="mi">Tambahkan File Elemen ke Project…</div>
+    <div class="mi">Perbarui Definisi dari File…</div>
+    <div class="divider"></div>
+    <div class="mi">Keluar</div>
+  </div>
+</div>
+
+<!-- PROJECT TABS -->
+<div id="project-tabs">
+  <span class="ptab active">Project P1</span>
+  <span class="ptab">BP_D1200.elem</span>
+</div>
+
+<!-- MAIN 3-COLUMN -->
+<div id="main-grid">
+
+  <!-- SIDEBAR / TREE -->
+  <div id="sidebar">
+    <div class="h">Pohon</div>
+    <div class="tree-root">Project P1</div>
+    <div class="tree-group active" data-group="BP-P1">BP-P1 · bored pile (9)</div>
+    <div class="tree-item active" data-pile="P1-1">P1-1</div>
+    <div class="tree-item" data-pile="P1-2">P1-2 <span class="ov">● 26000</span></div>
+    <div class="tree-item" data-pile="P1-3">P1-3</div>
+    <div class="tree-item" style="color:var(--muted)">… P1-9</div>
+    <div class="tree-muted">Pile cap</div>
+    <div class="tree-muted">Pier (belum ada)</div>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvas">
+    <div class="view-tabs">
+      <button class="vtab" data-view="3d">3D</button>
+      <button class="vtab active" data-view="potongan">Potongan</button>
+      <button class="vtab" data-view="lembar">Lembar</button>
+      <span class="view-title" id="view-title">Pile P1-1 · kedalaman 30000 mm</span>
+    </div>
+    <div class="canvas-body" id="canvas-body">
+      <!-- SVG filled by JS -->
+    </div>
+  </div>
+
+  <!-- PROPERTIES -->
+  <div id="props">
+    <div class="h" style="margin-top:0">Grup BP-P1</div>
+    <div class="r"><span>Diameter</span><span>1200 mm</span></div>
+    <div class="r"><span>Selimut (ke permukaan)</span><span>75 mm</span></div>
+    <div class="r"><span>Beton / Baja</span><span>fc30 / fy420 ulir</span></div>
+
+    <div class="h">Tulangan</div>
+    <div class="r"><span>B1 Lurus D32 · 2×28</span><span>Z0–Z2</span></div>
+    <div class="r"><span>B2 Spiral D16 @75</span><span>Z1</span></div>
+    <div class="r"><span>B3 O-ring D16 @200</span><span>Z2</span></div>
+    <button class="btn-accent" onclick="openRebarModal()">+ Tambah tulangan</button>
+
+    <div class="h">Pemeriksaan</div>
+    <div class="r"><span>Jumlah vs rumus</span><span class="status-ok">Sesuai</span></div>
+    <div class="r"><span>Spasi bersih</span><span class="status-warn">2 peringatan</span></div>
+    <div class="r"><span>Bentrok</span><span class="status-ok">0</span></div>
+  </div>
+</div>
+
+<!-- BOTTOM TABLE -->
+<div id="bottom">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>X (mm)</th>
+        <th>Y (mm)</th>
+        <th>Kedalaman dari Cof</th>
+        <th>Zona fleksibel Z3</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>P1-1</td>
+        <td>-3000</td>
+        <td>-3000</td>
+        <td>30000 (grup)</td>
+        <td>19000</td>
+        <td>Sesuai</td>
+      </tr>
+      <tr>
+        <td>P1-2</td>
+        <td>0</td>
+        <td>-3000</td>
+        <td class="ov">26000 ●</td>
+        <td>15000</td>
+        <td>Sesuai</td>
+      </tr>
+      <tr>
+        <td>P1-3</td>
+        <td>3000</td>
+        <td>-3000</td>
+        <td>30000 (grup)</td>
+        <td>19000</td>
+        <td>Sesuai</td>
+      </tr>
+    </tbody>
+  </table>
+  <div id="status">
+    <span>&gt;</span>
+    <input id="cmd-input" type="text" placeholder="SET P1-2 DEPTH 26000" spellcheck="false" autocomplete="off">
+    <span class="prompt">— nilai ini menimpa grup</span>
+  </div>
+</div>
+
+<!-- MODAL: Tambah tulangan (sesuai dialog_mockup) -->
+<div class="modal-overlay" id="rebar-modal">
+  <div class="modal">
+    <div class="modal-head">Tambah tulangan · Grup BP-P1</div>
+    <div class="modal-steps">
+      <span class="done">1 Bentuk ✓</span>
+      <span>›</span>
+      <span>2 Parameter</span>
+      <span>›</span>
+      <span>3 Posisi dan susunan</span>
+    </div>
+    <div class="modal-body">
+      <div>
+        <div class="h" style="margin-top:0">Bentuk (library)</div>
+        <div class="shape-item">R20 · Lurus</div>
+        <div class="shape-item selected">R87 · Spiral</div>
+        <div class="shape-item">RING · O-ring</div>
+        <div class="shape-item" style="color:var(--muted)">Dari BS 8666… (nanti)</div>
+        <svg viewBox="0 0 200 150" style="width:100%;margin-top:10px" role="img" aria-label="Pratinjau spiral">
+          <g fill="none" stroke="#2a7a4b" stroke-width="2">
+            <path d="M60 20 Q140 28 140 38 Q60 46 60 56 Q140 64 140 74 Q60 82 60 92 Q140 100 140 110 Q60 118 60 128"/>
+          </g>
+          <text x="8" y="146" font-size="11" fill="#5a6270">A diameter · B spasi · C tinggi</text>
+        </svg>
+      </div>
+      <div>
+        <div class="h" style="margin-top:0">Parameter</div>
+        <label class="lb" for="d">Diameter batang (mm)</label>
+        <input id="d" class="fm" value="16">
+        <label class="lb" for="s">Spasi / pitch (mm)</label>
+        <input id="s" class="fm" value="75">
+        <div class="h">Posisi dan susunan</div>
+        <label class="lb" for="z">Zona</label>
+        <input id="z" class="fm" value="Z1 (3000 mm di bawah Cof)">
+        <label class="lb" for="o">Orientasi</label>
+        <input id="o" class="fm" value="Vertikal (sumbu pile)">
+        <label class="lb" for="p">Posisi terhadap beton</label>
+        <input id="p" class="fm" value="Di dalam muka luar, selimut 75 ke permukaan">
+        <label class="lb" for="g">Susunan</label>
+        <input id="g" class="fm" value="Grup · spasi 75 · dari 0 sampai ujung zona">
+        <div class="note">
+          Panjang potong 457,9 m · 12 kali putar per zona 1 m<br>
+          <span class="warn">Spasi bersih terhadap B1: 71 mm (batas proyek 75 mm)</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeRebarModal()">Batal</button>
+      <button class="btn btn-primary" onclick="addRebar()">Tambahkan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js" defer></script>
+</body>
+</html>

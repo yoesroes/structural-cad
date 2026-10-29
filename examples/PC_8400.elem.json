@@ -1,0 +1,310 @@
+{
+  "kind": "element",
+  "schema_version": 1,
+  "definition": {
+    "type": "pile_cap",
+    "type_version": 1,
+    "name": "Pile cap 8.4x8.4x2.5 m",
+    "params": {
+      "length": 8400,
+      "width": 8400,
+      "height": 2500,
+      "cover_top": 100,
+      "cover_bottom": 250,
+      "cover_side_x": 100,
+      "cover_side_y": 100,
+      "cover_ref": "centerline",
+      "lap_nesting": "inside_edge_bars",
+      "lap_ratio_D": 40,
+      "lap_mid_height": 1250
+    },
+    "materials": {
+      "concrete": {
+        "grade": "fc30",
+        "type": "readymix"
+      },
+      "steel": {
+        "grade": "fy420",
+        "type": "ulir"
+      }
+    },
+    "zones": [
+      {
+        "id": "ZFULL",
+        "side": "above_cof",
+        "length": 2500
+      }
+    ],
+    "rebars": [
+      {
+        "id": "P3",
+        "shape": {
+          "code": "U-INV"
+        },
+        "diameter": 19,
+        "orientation": "longitudinal",
+        "extent": {
+          "zones": [
+            "ZFULL"
+          ]
+        },
+        "position": {
+          "ref": "concrete",
+          "face": "top",
+          "offset_type": "center",
+          "offset": 100
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "linear",
+          "axis": "y",
+          "by": "spacing",
+          "spacing": 100,
+          "range": {
+            "from": 100,
+            "to": 8300
+          }
+        },
+        "shape_params": {
+          "leg_inset": "=d_of('P1')"
+        },
+        "notes": "U terbalik atas; jalur sejajar X, distribusi sepanjang Y"
+      },
+      {
+        "id": "P1",
+        "shape": {
+          "code": "U-INV"
+        },
+        "diameter": 19,
+        "orientation": "transverse",
+        "extent": {
+          "zones": [
+            "ZFULL"
+          ]
+        },
+        "position": {
+          "ref": "bar",
+          "bar": "P3",
+          "relation": "below",
+          "gap": 0
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "linear",
+          "axis": "x",
+          "by": "spacing",
+          "spacing": 100,
+          "range": {
+            "from": 100,
+            "to": 8300
+          }
+        },
+        "shape_params": {
+          "leg_inset": 0
+        },
+        "notes": "U terbalik; jalur sejajar Y, distribusi sepanjang X"
+      },
+      {
+        "id": "P4",
+        "shape": {
+          "code": "U"
+        },
+        "diameter": 19,
+        "orientation": "longitudinal",
+        "extent": {
+          "zones": [
+            "ZFULL"
+          ]
+        },
+        "position": {
+          "ref": "concrete",
+          "face": "bottom",
+          "offset_type": "center",
+          "offset": 250
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "linear",
+          "axis": "y",
+          "by": "spacing",
+          "spacing": 100,
+          "range": {
+            "from": 100,
+            "to": 8300
+          }
+        },
+        "shape_params": {
+          "leg_inset": "=d_of('P3')+d_of('P4')"
+        },
+        "notes": "U bawah; jalur sejajar X"
+      },
+      {
+        "id": "P2",
+        "shape": {
+          "code": "U"
+        },
+        "diameter": 19,
+        "orientation": "transverse",
+        "extent": {
+          "zones": [
+            "ZFULL"
+          ]
+        },
+        "position": {
+          "ref": "bar",
+          "bar": "P4",
+          "relation": "above",
+          "gap": 0
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "linear",
+          "axis": "x",
+          "by": "spacing",
+          "spacing": 100,
+          "range": {
+            "from": 100,
+            "to": 8300
+          }
+        },
+        "shape_params": {
+          "leg_inset": "=d_of('P3')"
+        },
+        "notes": "U bawah; jalur sejajar Y"
+      },
+      {
+        "id": "P5",
+        "shape": {
+          "code": "X-HOOK-135-135"
+        },
+        "diameter": 16,
+        "orientation": "vertical",
+        "extent": {
+          "zones": [
+            "ZFULL"
+          ]
+        },
+        "position": {
+          "ref": "concrete",
+          "face": "top",
+          "offset": 0
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "linear",
+          "axis": "x",
+          "by": "spacing",
+          "spacing": 600,
+          "x_spacing_y": 600
+        },
+        "shape_params": {
+          "inset": 600,
+          "hook_angle_deg": 135,
+          "hook_bend_diameter_db": 6,
+          "hook_tail_length_diameters": 10
+        },
+        "notes": "pengikat vertikal grid"
+      },
+      {
+        "id": "P6",
+        "shape": {
+          "code": "X-HOOK-135-90"
+        },
+        "diameter": 16,
+        "orientation": "horizontal",
+        "extent": {
+          "zones": [
+            "ZFULL"
+          ]
+        },
+        "position": {
+          "ref": "concrete",
+          "face": "outer",
+          "offset": 0
+        },
+        "arrangement": {
+          "mode": "group",
+          "pattern": "linear",
+          "axis": "z",
+          "by": "spacing",
+          "spacing": 300
+        },
+        "shape_params": {
+          "levels": 8,
+          "hook_a_angle_deg": 135,
+          "hook_a_tail_db": 6,
+          "hook_b_angle_deg": 90,
+          "hook_b_tail_db": 12,
+          "hook_bend_diameter_db": 6
+        },
+        "notes": "pembagi samping 4 sisi"
+      }
+    ]
+  },
+  "shapes": {
+    "U-INV": {
+      "code": "U-INV",
+      "version": 1,
+      "name": "U terbalik",
+      "params": [
+        {
+          "name": "A",
+          "default": 0
+        }
+      ],
+      "builder": {
+        "type": "straight",
+        "length": "=A"
+      },
+      "cut_length": "=A"
+    },
+    "U": {
+      "code": "U",
+      "version": 1,
+      "name": "U",
+      "params": [
+        {
+          "name": "A",
+          "default": 0
+        }
+      ],
+      "builder": {
+        "type": "straight",
+        "length": "=A"
+      },
+      "cut_length": "=A"
+    },
+    "X-HOOK-135-135": {
+      "code": "X-HOOK-135-135",
+      "version": 1,
+      "name": "Kait 135-135",
+      "params": [
+        {
+          "name": "A",
+          "default": 0
+        }
+      ],
+      "builder": {
+        "type": "straight",
+        "length": "=A"
+      },
+      "cut_length": "=A"
+    },
+    "X-HOOK-135-90": {
+      "code": "X-HOOK-135-90",
+      "version": 1,
+      "name": "Kait 135-90",
+      "params": [
+        {
+          "name": "A",
+          "default": 0
+        }
+      ],
+      "builder": {
+        "type": "straight",
+        "length": "=A"
+      },
+      "cut_length": "=A"
+    }
+  }
+}

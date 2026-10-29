@@ -1,0 +1,7 @@
+# T08 — Komponen tabel pile (interaktif)
+Baca `00_KONTEKS.md` (butir 3 dan 5) dan `web/src/types.ts`.
+**Tujuan:** `web/src/components/PileTable.tsx` yang murni presentasi + callback, tanpa memanggil backend.
+**Props:** `piles: ResolvedPile[]`, `groupDepth: number` (default grup), `onOperation: (op: Operation) => void`, `issues?: Issue[]`.
+**Perilaku:** kolom ID, X, Y, Kedalaman dari COF, Zona fleksibel (panjang zona `"rest"`; bila tidak ada zona rest tampilkan "-"), Status. Nilai kedalaman yang menimpa grup (`overridden` berisi "depth_below_cof") ditandai ● dan berwarna; yang sama dengan grup bertuliskan "(grup)". Klik sel kedalaman -> input angka; Enter/blur menyimpan dan memanggil `onOperation({op:"set_pile_depth", ...})`; Esc membatalkan. Nilai harus angka > 0, selain itu tampilkan pesan galat di sel dan jangan panggil callback. Klik kanan (atau tombol menu sel) pada nilai bertanda -> "Kembalikan ke nilai grup" -> `reset_pile_depth`. Hanya kedalaman dan panjang zona yang boleh diedit; kolom lain hanya baca. Status per pile dari `issues` (path diawali `/groups/*/instances/<index>` atau menyebut ID pile): "Sesuai", "Peringatan", atau "Galat".
+**Berkas keluaran:** `web/src/components/PileTable.tsx`, `PileTable.test.tsx`, `PileTable.css`.
+**Uji wajib:** render 9 pile dari `examples/expected_zones.P1.json` (bentuk dikonversi ke `ResolvedPile`); P1-2 bertanda; edit P1-1 ke 27000 memanggil callback tepat sekali dengan op yang benar; masukan "abc", "0", "-5" ditolak; reset memanggil `reset_pile_depth`; Esc membatalkan.

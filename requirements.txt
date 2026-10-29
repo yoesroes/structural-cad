@@ -1,0 +1,3 @@
+# Dependensi inti — prefer: pip install -e .
+# File ini hanya penunjuk agar pip install -r requirements.txt tetap berfungsi.
+jsonschema>=4.0
