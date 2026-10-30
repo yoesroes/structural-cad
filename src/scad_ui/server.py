@@ -196,12 +196,63 @@ def _save_validated(doc: dict, target: Path) -> tuple[bool, dict]:
 
 
 def _commit(doc: dict, target: Path | None = None) -> tuple[bool, dict]:
-    """Validasi, simpan, lalu commit state aktif secara atomik."""
-    target = target or (CURRENT_PATH if CURRENT_PATH is not None else DATA_ROOT / "project.json")
+    """Validasi, simpan, lalu commit state aktif secara atomik.
+
+    Bila project belum punya path (CURRENT_PATH is None) dan target adalah
+    fallback DATA_ROOT/project.json, berkas tetap ditulis tetapi CURRENT_PATH
+    tetap None dan DIRTY tetap True agar status "belum bernama" / Simpan As
+    tidak hilang. CURRENT_PATH dan DIRTY=False hanya diset bila target sama
+    dengan CURRENT_PATH yang sudah ada (project bertajuk).
+    """
+    previous_path = CURRENT_PATH
+    if target is None:
+        target = previous_path if previous_path is not None else DATA_ROOT / "project.json"
     ok, info = _save_validated(doc, target)
     if ok:
-        _set_current(doc, path=target, dirty=False)
+        if previous_path is not None and target == previous_path:
+            _set_current(doc, path=target, dirty=False)
+        elif previous_path is None:
+            # Project tanpa judul: jangan mengisi path dari fallback scratch.
+            _set_current(doc, path=None, dirty=True)
+        else:
+            # Target eksplisit berbeda dari path aktif (jarang untuk _commit).
+            _set_current(doc, path=target, dirty=False)
     return ok, info
+
+
+def _pile_ids_from_issue_path(doc: dict, path: str) -> set[str] | None:
+    """Petakan JSON Pointer issue ke id pile, atau None bila bukan path instance."""
+    parts = [p for p in (path or "").strip("/").split("/") if p]
+    if len(parts) >= 4 and parts[0] == "groups" and parts[2] == "instances":
+        try:
+            gi = int(parts[1])
+            ii = int(parts[3])
+            inst = ((doc.get("groups") or [])[gi].get("instances") or [])[ii]
+            pid = inst.get("id")
+            return {pid} if pid else set()
+        except (ValueError, IndexError, TypeError, KeyError, AttributeError):
+            return set()
+    return None
+
+
+def _resolve_errors_for_pile(
+    resolve_issues: list, doc: dict, pile_id: str
+) -> list:
+    """Saring error resolve yang menyangkut pile yang diedit atau issue global.
+
+    Error pada pile lain tidak menghalangi edit pile yang sehat.
+    """
+    relevant: list = []
+    for issue in resolve_issues or []:
+        if issue.get("level") != "error":
+            continue
+        concerned = _pile_ids_from_issue_path(doc, issue.get("path") or "")
+        if concerned is None:
+            # Issue global (bukan path instance) — tetap blokir.
+            relevant.append(issue)
+        elif pile_id in concerned:
+            relevant.append(issue)
+    return relevant
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -620,13 +671,13 @@ class Handler(BaseHTTPRequestHandler):
             new_doc, _inverse = apply_operation(project, op)
             resolved = resolve_project(new_doc)
             resolve_issues = resolved.get("issues") or []
-            resolve_errors = [issue for issue in resolve_issues if issue.get("level") == "error"]
+            resolve_errors = _resolve_errors_for_pile(resolve_issues, new_doc, pile_id)
             if resolve_errors:
                 self.send_json(
                     {
                         "ok": False,
                         "error": "Resolve gagal; perubahan tidak disimpan",
-                        "issues": resolve_issues,
+                        "issues": resolve_errors,
                     },
                     400,
                 )

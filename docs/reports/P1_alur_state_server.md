@@ -1,164 +1,109 @@
-# Laporan Pekerjaan P1 — Alur State Server
+# Laporan P1 / P1b — Alur state server
 
-Tanggal: 2026-10-31
-Repo: `final_scad_h5/Structural cad`
+Tanggal: 2026-10-31  
+Repo: Structural CAD (pasca H5 + P0/P1/P1b)
 
 ## Ruang lingkup
 
-P1 mengerjakan:
+- **T1** — Alur state server dan edit pile berurutan (termasuk path yang dibuka)
+- **T2** — Penolakan edit zona/kedalaman tidak feasibel
+- **S1** — `add_rebar` tidak meracuni state sesi
+- **P1b** — Rapikan `_commit` untuk project tanpa judul; saring error resolve per pile; konsolidasi tes; perbaiki arah tes T3; S2 save-as
 
-- **T1 — Alur state server dan edit pile berurutan**
-- **S1 — Mutasi `add_rebar` yang dapat meracuni state sesi**
-
-Tidak ada perubahan pada engine, schema, UI, atau format response JSON.
+Tidak ada perubahan schema, engine geometri, atau format project JSON.
 
 ## Perubahan implementasi
 
-### Helper `_commit`
+### `_commit` (P1 + P1b)
 
-Ditambahkan helper tunggal pada `src/scad_ui/server.py`:
+Urutan: validasi → simpan → baru `_set_current`.
 
-```text
-_commit(doc, target=None)
-```
+P1b: bila `CURRENT_PATH` sebelumnya `None` dan target adalah fallback `DATA_ROOT/project.json`, dokumen tetap ditulis tetapi **`CURRENT_PATH` tetap `None`** dan **`DIRTY` tetap `True`**. Path dan `DIRTY=False` hanya diset bila target sama dengan `CURRENT_PATH` yang sudah ada (project bertajuk).
 
-Urutannya:
+### `add_rebar` (S1)
 
-1. Memilih target `CURRENT_PATH` jika ada.
-2. Menggunakan `DATA_ROOT/project.json` sebagai fallback.
-3. Menjalankan validasi.
-4. Menyimpan dokumen.
-5. Hanya setelah save berhasil memanggil `_set_current()`.
+Memakai `copy.deepcopy` dari dokumen sesi; commit hanya lewat `_commit`.
 
-Dengan urutan ini, kegagalan validasi atau save tidak mengganti `CURRENT_DOC`, `CURRENT_PATH`, atau `DIRTY`.
+### `_apply_pile_op_and_respond` (T1/T2 + P1b)
 
-### T1 — Edit pile
+Memakai `_commit`. Error resolve disaring lewat `_resolve_errors_for_pile`: hanya issue global atau issue yang path-nya mengarah ke instance pile yang diedit yang menolak operasi. Path instance dipetakan dari pointer `/groups/{gi}/instances/{ii}` ke id pile di dokumen (tanpa mengubah `scad.resolve`).
 
-`_apply_pile_op_and_respond()` sekarang menggunakan `_commit(new_doc)`.
+### Helper
 
-Regression test mencakup:
+- `_pile_ids_from_issue_path`
+- `_resolve_errors_for_pile`
 
-- dua edit depth pada pile berbeda;
-- edit pada project yang dibuka dari path workspace;
-- rangkaian tiga operasi: depth → zone → reset;
-- pemeriksaan state melalui `GET /api/project`;
-- pemeriksaan dokumen di disk.
+## Tes
 
-### S1 — `add_rebar`
+### Fixture
 
-`add_rebar()` sekarang:
+Satu fixture `ui_server` di `tests/conftest.py` memulihkan seluruh global server. Fixture `http_workspace` dihapus; `tests/ui/test_file_api.py` memakai `ui_server`.
 
-- memakai `copy.deepcopy()` dari dokumen sesi;
-- menerapkan perubahan hanya pada salinan;
-- memvalidasi salinan melalui `_commit()`;
-- tidak mengubah state aktif jika validasi gagal;
-- tetap dapat menyimpan dokumen berikutnya setelah operasi invalid ditolak.
+### Regression aktif
 
-## Regression test yang diaktifkan
+| ID | Tes | File |
+|----|-----|------|
+| T1 | Dua edit depth, tiga operasi berurutan, path dibuka | `tests/ui/test_state_regression.py` |
+| T2 | Depth 5000 pada P1-6 → 400 + `ZONE_DEPTH_SHORT`, disk utuh | sama |
+| S1 | Rebar invalid → 400, sesi utuh, save berikutnya OK | sama |
+| P1b | Project baru → add-element → depth: path None, dirty True; save-as mengisi path | sama |
+| P1b | P1-6 infeasibel di sesi; edit P1-1 depth 29000 → 200 | sama |
 
-Test berikut tidak lagi `xfail`:
+Duplikat T1/T2 di `test_file_api.py` dihapus. Indeks `instances[n]` diganti pencarian by id. Asersi mengandalkan kode issue (`ZONE_DEPTH_SHORT`), bukan teks pesan penuh.
 
-```text
-test_s1_invalid_rebar_does_not_poison_session
-```
+### Xfail (strict)
 
-Test tersebut memverifikasi bahwa:
+- S2: header asing pada `/api/project/save` dan `/api/project/save-as`
+- T3: polar `by:spacing` harus `ARR_BAD` + `ValueError` dari `build_bar_groups`; `start_angle_deg`
+- T4: total rekap `count * cut_length`
+- S6, S7: di `tests/core/test_core_audit_regressions.py`
 
-1. rebar invalid menghasilkan HTTP 400;
-2. `CURRENT_DOC` tetap sama;
-3. operasi save berikutnya tetap berhasil.
+Tes T3 polar spacing diarahkan ulang sesuai keputusan D2 (ditolak), bukan "batang tetap ada".
 
-## Berkas yang berubah pada P1
+## Mutation check (P1b langkah 5)
 
-- `src/scad_ui/server.py`
-  - helper `_commit`;
-  - copy-on-write pada `add_rebar`;
-  - penggunaan `_commit` pada edit pile.
-- `tests/ui/test_state_regression.py`
-  - menghapus xfail S1;
-  - menambahkan test tiga operasi berurutan untuk T1.
-- `LAPORAN_P1.md`
-  - laporan ini.
+Sementara pemakaian `_commit` di `_apply_pile_op_and_respond` diganti ke pola lama (selalu tulis `DATA_ROOT/project.json` lalu `_set_current(path=target)`):
 
-Berkas P0 lain tetap dipertahankan.
+- `test_t1_opened_path_is_edit_target` **gagal** (edit tidak masuk file workspace)
+- `test_untitled_project_keeps_path_none_after_pile_edit` **gagal** (`CURRENT_PATH` terisi path scratch)
+- `test_t2_unfeasible_depth_is_rejected_without_disk_change` tetap lulus karena gerbang resolve masih menolak sebelum tulis
+
+Setelah kode dipulihkan, ketiga tes hijau lagi.
+
+## Berkas yang berubah
+
+- `src/scad_ui/server.py` — `_commit`, filter resolve per pile, helper path issue
+- `tests/conftest.py` — (tidak diubah pada P1b; sudah dari P0)
+- `tests/ui/test_state_regression.py` — T1/T2/S1 + P1b + S2 save-as
+- `tests/ui/test_file_api.py` — migrasi ke `ui_server`, hapus duplikat T1/T2
+- `tests/engine/test_engine_audit_regressions.py` — arah tes T3
+- `docs/reports/P1_alur_state_server.md` — laporan gabungan ini
+
+Laporan lama T1–T2 / P0 / P1 di `docs/reports/` tetap sebagai jejak sejarah; acuan status adalah berkas ini.
 
 ## Verifikasi
 
-### Test terarah
+Perintah:
 
 ```bash
-pytest tests/ui/test_state_regression.py tests/ui/test_ops_api.py tests/ui/test_file_api.py -q
-```
-
-Hasil:
-
-```text
-23 passed, 1 xfailed
-```
-
-`xfail` tersebut adalah S2, yang memang belum dikerjakan pada P1.
-
-### Syntax check
-
-```bash
-python3 -m py_compile src/scad_ui/server.py tests/ui/test_state_regression.py tests/ui/test_ops_api.py
-```
-
-Hasil: berhasil.
-
-### Full Python suite
-
-```bash
-python -m pytest tests -rxX
-```
-
-Hasil:
-
-```text
-209 passed, 1 skipped, 6 xfailed, 5 subtests passed
-```
-
-Xfail yang masih terbuka:
-
-```text
-S2, S6, S7, T3 (2 test), T4
-```
-
-Test yang di-skip:
-
-```text
-tests/engine/test_generic.py:81 — CadQuery tidak tersedia
-```
-
-### Examples
-
-```bash
-python tools/check_examples.py
-```
-
-Hasil:
-
-```text
-SEMUA LOLOS
-```
-
-### TypeScript
-
-```bash
+PYTHONPATH=src python -m pytest tests -q
+PYTHONPATH=src python tools/check_examples.py
 node --experimental-strip-types --no-warnings --test web/src/commands/*.test.ts
 ```
 
-Hasil:
+Hasil aktual (mesin audit P1b):
 
 ```text
-26 passed, 0 failed
+pytest tests: 209 passed, 1 skipped, 7 xfailed, 5 subtests passed
+tools/check_examples.py: SEMUA LOLOS
+node web/src/commands/*.test.ts: 26 passed, 0 failed
 ```
 
-## Kompatibilitas dan asumsi
+Xfail: S2×2, S6, S7, T3×2, T4. Skip: CadQuery di `test_generic.py`.
 
-- Dokumen project JSON lama tetap digunakan.
-- Target save project yang sudah dibuka tetap `CURRENT_PATH`.
-- Project tanpa path tetap memakai `DATA_ROOT/project.json`.
-- Perilaku autosave edit pile dipertahankan sehingga `DIRTY=False` setelah commit berhasil.
-- Tidak ada perubahan hasil perhitungan pile cap atau engine klasik.
-- CadQuery tidak tersedia; test terkait tidak diklaim lulus.
+## Asumsi dan isu terbuka
+
+- Issue resolve per pile memakai path JSON Pointer yang sudah ada; field `pile` tidak ditambahkan ke `scad.resolve` (di luar berkas yang diizinkan P1b).
+- `save_project` eksplisit masih boleh menulis ke `DATA_ROOT/project.json` dan mengisi path (perilaku Save pada project tanpa judul).
+- S2, S6, S7, T3, T4 tetap backlog P2/P3/P5/P7.
+- CadQuery tidak tersedia → satu tes engine di-skip.

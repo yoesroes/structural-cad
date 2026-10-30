@@ -1,12 +1,12 @@
-"""Tes merah P0 untuk temuan engine yang belum diperbaiki."""
+"""Tes merah P0/P1b untuk temuan engine yang belum diperbaiki."""
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
 import pytest
 
+from scad.validate import validate_document
 from scad_engine.from_v1 import build_bar_groups, recap_group
 
 
@@ -26,7 +26,11 @@ def rebar(doc: dict, rid: str) -> dict:
 
 
 @pytest.mark.xfail(strict=True, reason="T3")
-def test_polar_spacing_is_rejected_instead_of_dropping_bars():
+def test_polar_spacing_rejected_with_arr_bad_and_build_raises():
+    """D2: polar by spacing harus ditolak (ARR_BAD), bukan menghilangkan batang.
+
+    validate_document wajib memunculkan ARR_BAD; build_bar_groups wajib ValueError.
+    """
     doc = load_p1()
     rebar(doc, "B1")["arrangement"] = {
         "mode": "group",
@@ -34,8 +38,13 @@ def test_polar_spacing_is_rejected_instead_of_dropping_bars():
         "by": "spacing",
         "spacing": 110,
     }
-    groups = build_bar_groups(doc, "P1-1")
-    assert any(group.mark == "B1" for group in groups)
+    issues = validate_document(doc)
+    assert any(
+        getattr(issue, "code", None) == "ARR_BAD" and issue.level == "error"
+        for issue in issues
+    )
+    with pytest.raises(ValueError):
+        build_bar_groups(doc, "P1-1")
 
 
 @pytest.mark.xfail(strict=True, reason="T3")

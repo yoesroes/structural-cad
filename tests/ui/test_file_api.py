@@ -1,13 +1,10 @@
-"""Tes HTTP G2/H1 dengan server lokal pada workspace sementara."""
+"""Tes HTTP G2/H1 dengan fixture ui_server bersama (P1b: tanpa http_workspace)."""
 from __future__ import annotations
 
 import copy
 import json
-import shutil
-import threading
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -35,48 +32,21 @@ def _request(base: str, method: str, path: str, body: dict | None = None):
         return error.code, json.loads(error.read().decode("utf-8"))
 
 
-@pytest.fixture
-def http_workspace(tmp_path: Path):
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    shutil.copy(REPO / "examples" / "P1.project.json", workspace / "P1.project.json")
-    shutil.copy(REPO / "examples" / "BP_D1200.elem.json", workspace / "BP_D1200.elem.json")
-
-    previous = {
-        "workspace": ui_mod.WORKSPACE,
-        "data_root": ui_mod.DATA_ROOT,
-        "current_doc": ui_mod.CURRENT_DOC,
-        "current_path": ui_mod.CURRENT_PATH,
-        "dirty": ui_mod.DIRTY,
-    }
-    ui_mod.set_workspace(workspace)
-    ui_mod.set_data_root(tmp_path / "data")
-    ui_mod.CURRENT_DOC = None
-    ui_mod.CURRENT_PATH = None
-    ui_mod.DIRTY = False
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    base = f"http://127.0.0.1:{server.server_address[1]}"
-    try:
-        yield workspace, base
-    finally:
-        server.shutdown()
-        server.server_close()
-        ui_mod.set_workspace(previous["workspace"])
-        ui_mod.set_data_root(previous["data_root"])
-        ui_mod.CURRENT_DOC = previous["current_doc"]
-        ui_mod.CURRENT_PATH = previous["current_path"]
-        ui_mod.DIRTY = previous["dirty"]
-
-
 def _valid_errors(doc: dict) -> list:
     return [issue for issue in validate_document(doc) if issue.level == "error"]
 
 
-def test_project_new_save_as_open_roundtrip(http_workspace):
-    _, base = http_workspace
+def _instance(project: dict, pile_id: str) -> dict:
+    return next(
+        inst
+        for group in project["groups"]
+        for inst in group["instances"]
+        if inst["id"] == pile_id
+    )
+
+
+def test_project_new_save_as_open_roundtrip(ui_server):
+    base = ui_server["base"]
     status, created = _request(base, "POST", "/api/project/new", {"id": "NEW", "name": "New"})
     assert status == 200
     assert _valid_errors(created["project"]) == []
@@ -96,8 +66,9 @@ def test_project_new_save_as_open_roundtrip(http_workspace):
     assert _valid_errors(opened["project"]) == []
 
 
-def test_project_new_clears_previous_path_before_save(http_workspace):
-    workspace, base = http_workspace
+def test_project_new_clears_previous_path_before_save(ui_server):
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
     status, _ = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
     assert status == 200
 
@@ -110,8 +81,9 @@ def test_project_new_clears_previous_path_before_save(http_workspace):
     assert json.loads((ui_mod.DATA_ROOT / "project.json").read_text(encoding="utf-8"))["project"]["id"] == "NEW"
 
 
-def test_project_open_rejects_structurally_invalid_document(http_workspace):
-    workspace, base = http_workspace
+def test_project_open_rejects_structurally_invalid_document(ui_server):
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
     invalid = workspace / "invalid.project.json"
     invalid.write_text(json.dumps({"kind": "project", "schema_version": 1}), encoding="utf-8")
     status, body = _request(base, "POST", "/api/project/open", {"path": invalid.name})
@@ -120,89 +92,9 @@ def test_project_open_rejects_structurally_invalid_document(http_workspace):
     assert "/project" in body["error"] or "project" in body["error"]
 
 
-def test_pile_edits_update_open_project_state_and_file(http_workspace):
-    workspace, base = http_workspace
-    status, opened = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
-    assert status == 200
-    assert opened["path"] == "P1.project.json"
-    initial_instances = {
-        instance["id"]: instance
-        for group in opened["project"]["groups"]
-        for instance in group["instances"]
-    }
-    assert initial_instances["P1-2"]["overrides"]["params"]["depth_below_cof"] == 26000
-    assert initial_instances["P1-5"]["overrides"]["params"]["depth_below_cof"] == 28500
-
-    status, first = _request(
-        base,
-        "POST",
-        "/api/pile/P1-2/depth",
-        {"depth": 25500},
-    )
-    assert status == 200
-    assert first["ok"] is True
-
-    status, second = _request(
-        base,
-        "POST",
-        "/api/pile/P1-5/depth",
-        {"depth": 25000},
-    )
-    assert status == 200
-    assert second["ok"] is True
-    assert ui_mod.CURRENT_PATH == workspace / "P1.project.json"
-    assert ui_mod.DIRTY is False
-
-    status, current = _request(base, "GET", "/api/project")
-    assert status == 200
-    instances = {
-        instance["id"]: instance
-        for group in current["project"]["groups"]
-        for instance in group["instances"]
-    }
-    assert instances["P1-2"]["overrides"]["params"]["depth_below_cof"] == 25500
-    assert instances["P1-5"]["overrides"]["params"]["depth_below_cof"] == 25000
-
-    saved = json.loads((workspace / "P1.project.json").read_text(encoding="utf-8"))
-    saved_instances = {
-        instance["id"]: instance
-        for group in saved["groups"]
-        for instance in group["instances"]
-    }
-    assert saved_instances["P1-2"]["overrides"]["params"]["depth_below_cof"] == 25500
-    assert saved_instances["P1-5"]["overrides"]["params"]["depth_below_cof"] == 25000
-    assert not (ui_mod.DATA_ROOT / "project.json").exists()
-
-
-def test_pile_edit_rejects_unfeasible_depth_without_mutating_state(http_workspace):
-    workspace, base = http_workspace
-    status, opened = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
-    assert status == 200
-    before_doc = copy.deepcopy(opened["project"])
-    before_file = (workspace / "P1.project.json").read_bytes()
-
-    status, body = _request(
-        base,
-        "POST",
-        "/api/pile/P1-1/depth",
-        {"depth": 5000},
-    )
-    assert status == 400
-    assert body["ok"] is False
-    assert body["error"] == "Resolve gagal; perubahan tidak disimpan"
-    assert any(issue["code"] == "ZONE_DEPTH_SHORT" for issue in body["issues"])
-    assert ui_mod.CURRENT_DOC == before_doc
-    assert ui_mod.CURRENT_PATH == workspace / "P1.project.json"
-    assert ui_mod.DIRTY is False
-    assert (workspace / "P1.project.json").read_bytes() == before_file
-
-    status, current = _request(base, "GET", "/api/project")
-    assert status == 200
-    assert current["project"] == before_doc
-
-
-def test_project_save_as_invalid_does_not_create_file(http_workspace):
-    workspace, base = http_workspace
+def test_project_save_as_invalid_does_not_create_file(ui_server):
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
     invalid = {"kind": "project", "schema_version": 1}
     status, body = _request(
         base,
@@ -216,8 +108,8 @@ def test_project_save_as_invalid_does_not_create_file(http_workspace):
     assert list(workspace.glob("*.tmp")) == []
 
 
-def test_project_save_as_invalid_keeps_active_project(http_workspace):
-    workspace, base = http_workspace
+def test_project_save_as_invalid_keeps_active_project(ui_server):
+    base = ui_server["base"]
     status, created = _request(base, "POST", "/api/project/new", {"id": "ACTIVE", "name": "Active"})
     assert status == 200
     active = created["project"]
@@ -229,11 +121,11 @@ def test_project_save_as_invalid_keeps_active_project(http_workspace):
     )
     assert status == 400
     assert ui_mod.CURRENT_DOC == active
-    assert not (workspace / "bad.project.json").exists()
+    assert not (ui_server["workspace"] / "bad.project.json").exists()
 
 
-def test_element_new_defaults_are_valid_for_supported_plugins(http_workspace):
-    _, base = http_workspace
+def test_element_new_defaults_are_valid_for_supported_plugins(ui_server):
+    base = ui_server["base"]
     for type_id in ("bored_pile", "pile_cap"):
         status, body = _request(base, "POST", "/api/element/new", {"type": type_id})
         assert status == 200
@@ -241,8 +133,8 @@ def test_element_new_defaults_are_valid_for_supported_plugins(http_workspace):
         assert _valid_errors(body["element"]) == []
 
 
-def test_project_new_invalid_input_returns_400_and_connection_survives(http_workspace):
-    _, base = http_workspace
+def test_project_new_invalid_input_returns_400_and_connection_survives(ui_server):
+    base = ui_server["base"]
     status, body = _request(base, "POST", "/api/project/new", {"id": "bad id!"})
     assert status == 400
     assert body["ok"] is False
@@ -253,8 +145,8 @@ def test_project_new_invalid_input_returns_400_and_connection_survives(http_work
     assert body["project"]["project"]["id"] == "GOOD"
 
 
-def test_unexpected_http_exception_returns_500_and_server_survives(http_workspace, monkeypatch):
-    _, base = http_workspace
+def test_unexpected_http_exception_returns_500_and_server_survives(ui_server, monkeypatch):
+    base = ui_server["base"]
 
     def boom(self, data):
         raise RuntimeError("detail internal yang tidak boleh dikirim")
@@ -270,8 +162,9 @@ def test_unexpected_http_exception_returns_500_and_server_survives(http_workspac
     assert body["project"]["project"]["id"] == "AFTER"
 
 
-def test_add_element_to_existing_project_validates_and_places_grid(http_workspace):
-    workspace, base = http_workspace
+def test_add_element_to_existing_project_validates_and_places_grid(ui_server):
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
     status, _ = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
     assert status == 200
     status, body = _request(
@@ -301,8 +194,8 @@ def test_add_element_to_existing_project_validates_and_places_grid(http_workspac
     assert _valid_errors(project_response["project"]) == []
 
 
-def test_add_element_to_new_empty_project(http_workspace):
-    _, base = http_workspace
+def test_add_element_to_new_empty_project(ui_server):
+    base = ui_server["base"]
     status, _ = _request(base, "POST", "/api/project/new", {"id": "EMPTY", "name": "Empty"})
     assert status == 200
     status, body = _request(
@@ -318,8 +211,9 @@ def test_add_element_to_new_empty_project(http_workspace):
     assert _valid_errors(project_response["project"]) == []
 
 
-def test_update_from_source_preserves_existing_overrides(http_workspace):
-    workspace, base = http_workspace
+def test_update_from_source_preserves_existing_overrides(ui_server):
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
     status, opened = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
     assert status == 200
     before = opened["project"]
@@ -343,12 +237,18 @@ def test_update_from_source_preserves_existing_overrides(http_workspace):
         assert new.get("overrides") == old.get("overrides")
 
 
-def test_update_from_source_invalid_zone_cancels(http_workspace):
-    workspace, base = http_workspace
+def test_update_from_source_invalid_zone_cancels(ui_server):
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
     status, opened = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
     assert status == 200
     original = copy.deepcopy(opened["project"])
-    original["groups"][0]["instances"][0]["overrides"] = {"zone_lengths": {"MISSING": 1}}
+    # Cari instance pertama berdasarkan id, bukan indeks tetap.
+    first_id = original["groups"][0]["instances"][0]["id"]
+    for inst in original["groups"][0]["instances"]:
+        if inst["id"] == first_id:
+            inst["overrides"] = {"zone_lengths": {"MISSING": 1}}
+            break
     ui_mod.CURRENT_DOC = original
     source = json.loads((workspace / "BP_D1200.elem.json").read_text(encoding="utf-8"))
     source["definition"]["name"] = "Should not apply"
@@ -365,8 +265,9 @@ def test_update_from_source_invalid_zone_cancels(http_workspace):
     assert ui_mod.CURRENT_DOC == original
 
 
-def test_source_diff_returns_leaf_definition_path_only(http_workspace):
-    workspace, base = http_workspace
+def test_source_diff_returns_leaf_definition_path_only(ui_server):
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
     status, _ = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
     assert status == 200
     source = json.loads((workspace / "BP_D1200.elem.json").read_text(encoding="utf-8"))
