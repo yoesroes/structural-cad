@@ -6,6 +6,7 @@ static/js/app.js saat ini LEGACY (tidak di-link dari index).
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 import threading
@@ -192,6 +193,15 @@ def _save_validated(doc: dict, target: Path) -> tuple[bool, dict]:
     target.parent.mkdir(parents=True, exist_ok=True)
     save_document(target, doc)
     return True, {"path": str(target)}
+
+
+def _commit(doc: dict, target: Path | None = None) -> tuple[bool, dict]:
+    """Validasi, simpan, lalu commit state aktif secara atomik."""
+    target = target or (CURRENT_PATH if CURRENT_PATH is not None else DATA_ROOT / "project.json")
+    ok, info = _save_validated(doc, target)
+    if ok:
+        _set_current(doc, path=target, dirty=False)
+    return ok, info
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -570,7 +580,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def add_rebar(self, elem_id, data):
         try:
-            project = _load_current_project()
+            project = copy.deepcopy(_load_current_project())
             found = False
             for group in project.get("groups", []):
                 if group.get("id") == elem_id:
@@ -585,7 +595,7 @@ class Handler(BaseHTTPRequestHandler):
                     404,
                 )
                 return
-            ok, info = _save_validated(project, DATA_ROOT / "project.json")
+            ok, info = _commit(project)
             if not ok:
                 self.send_json({"ok": False, **info}, 400)
                 return
@@ -608,11 +618,23 @@ class Handler(BaseHTTPRequestHandler):
                 op = {**op, "pile": pile_id}
 
             new_doc, _inverse = apply_operation(project, op)
-            ok, info = _save_validated(new_doc, DATA_ROOT / "project.json")
+            resolved = resolve_project(new_doc)
+            resolve_issues = resolved.get("issues") or []
+            resolve_errors = [issue for issue in resolve_issues if issue.get("level") == "error"]
+            if resolve_errors:
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": "Resolve gagal; perubahan tidak disimpan",
+                        "issues": resolve_issues,
+                    },
+                    400,
+                )
+                return
+            ok, info = _commit(new_doc)
             if not ok:
                 self.send_json({"ok": False, **info}, 400)
                 return
-            resolved = resolve_project(new_doc)
             pile_out = None
             for g in resolved.get("groups") or []:
                 for pl in g.get("piles") or []:

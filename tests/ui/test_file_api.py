@@ -120,6 +120,87 @@ def test_project_open_rejects_structurally_invalid_document(http_workspace):
     assert "/project" in body["error"] or "project" in body["error"]
 
 
+def test_pile_edits_update_open_project_state_and_file(http_workspace):
+    workspace, base = http_workspace
+    status, opened = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
+    assert status == 200
+    assert opened["path"] == "P1.project.json"
+    initial_instances = {
+        instance["id"]: instance
+        for group in opened["project"]["groups"]
+        for instance in group["instances"]
+    }
+    assert initial_instances["P1-2"]["overrides"]["params"]["depth_below_cof"] == 26000
+    assert initial_instances["P1-5"]["overrides"]["params"]["depth_below_cof"] == 28500
+
+    status, first = _request(
+        base,
+        "POST",
+        "/api/pile/P1-2/depth",
+        {"depth": 25500},
+    )
+    assert status == 200
+    assert first["ok"] is True
+
+    status, second = _request(
+        base,
+        "POST",
+        "/api/pile/P1-5/depth",
+        {"depth": 25000},
+    )
+    assert status == 200
+    assert second["ok"] is True
+    assert ui_mod.CURRENT_PATH == workspace / "P1.project.json"
+    assert ui_mod.DIRTY is False
+
+    status, current = _request(base, "GET", "/api/project")
+    assert status == 200
+    instances = {
+        instance["id"]: instance
+        for group in current["project"]["groups"]
+        for instance in group["instances"]
+    }
+    assert instances["P1-2"]["overrides"]["params"]["depth_below_cof"] == 25500
+    assert instances["P1-5"]["overrides"]["params"]["depth_below_cof"] == 25000
+
+    saved = json.loads((workspace / "P1.project.json").read_text(encoding="utf-8"))
+    saved_instances = {
+        instance["id"]: instance
+        for group in saved["groups"]
+        for instance in group["instances"]
+    }
+    assert saved_instances["P1-2"]["overrides"]["params"]["depth_below_cof"] == 25500
+    assert saved_instances["P1-5"]["overrides"]["params"]["depth_below_cof"] == 25000
+    assert not (ui_mod.DATA_ROOT / "project.json").exists()
+
+
+def test_pile_edit_rejects_unfeasible_depth_without_mutating_state(http_workspace):
+    workspace, base = http_workspace
+    status, opened = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
+    assert status == 200
+    before_doc = copy.deepcopy(opened["project"])
+    before_file = (workspace / "P1.project.json").read_bytes()
+
+    status, body = _request(
+        base,
+        "POST",
+        "/api/pile/P1-1/depth",
+        {"depth": 5000},
+    )
+    assert status == 400
+    assert body["ok"] is False
+    assert body["error"] == "Resolve gagal; perubahan tidak disimpan"
+    assert any(issue["code"] == "ZONE_DEPTH_SHORT" for issue in body["issues"])
+    assert ui_mod.CURRENT_DOC == before_doc
+    assert ui_mod.CURRENT_PATH == workspace / "P1.project.json"
+    assert ui_mod.DIRTY is False
+    assert (workspace / "P1.project.json").read_bytes() == before_file
+
+    status, current = _request(base, "GET", "/api/project")
+    assert status == 200
+    assert current["project"] == before_doc
+
+
 def test_project_save_as_invalid_does_not_create_file(http_workspace):
     workspace, base = http_workspace
     invalid = {"kind": "project", "schema_version": 1}
