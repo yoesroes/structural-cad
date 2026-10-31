@@ -8,6 +8,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+from scad.expr import check_expression
 from scad.issues import Issue
 from scad.io.canonical import sha256_of
 
@@ -274,6 +275,107 @@ def _ref_missing_for_definition(
                 )
 
 
+def _runtime_expression_names(definition: dict[str, Any]) -> set[str]:
+    """Nama variabel yang benar-benar tersedia saat evaluate di placement.
+
+    Sesuai placement.py: params elemen + d, pi, diameter, cover.
+    Tidak menyertakan A/B/C/height/width/length/r (bukan variabel runtime).
+    """
+    names = {"d", "pi", "diameter", "cover"}
+    params = definition.get("params") if isinstance(definition, dict) else None
+    if isinstance(params, dict):
+        names.update(str(k) for k in params)
+    return names
+
+
+def _expression_and_arrangement_issues(
+    definition: dict[str, Any], path_prefix: str, shapes: dict[str, Any]
+) -> list[Issue]:
+    issues: list[Issue] = []
+    if not isinstance(definition, dict):
+        return issues
+    base_names = _runtime_expression_names(definition)
+    funcs = {
+        "min",
+        "max",
+        "ceil",
+        "floor",
+        "round",
+        "abs",
+        "sqrt",
+        "d_of",
+        "zone_length",
+        "shape_param",
+    }
+
+    def scan(value: Any, path: str, names: set[str]) -> None:
+        if isinstance(value, str) and value.startswith("="):
+            for message in check_expression(value, names, funcs):
+                issues.append(Issue("error", "EXPR", path, message))
+        elif isinstance(value, dict):
+            for key, child in value.items():
+                scan(child, f"{path}/{key}", names)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                scan(child, f"{path}/{index}", names)
+
+    # Pindai definisi kecuali rebars (ditangani per rebar agar konteks nama tepat)
+    for key, child in definition.items():
+        if key == "rebars":
+            continue
+        scan(child, f"{path_prefix}/{key}", base_names)
+
+    rebars = definition.get("rebars") or []
+    if not isinstance(rebars, list):
+        return issues
+    for ri, rebar in enumerate(rebars):
+        if not isinstance(rebar, dict):
+            continue
+        base = f"{path_prefix}/rebars/{ri}"
+        # Nama runtime sama untuk posisi/extent/arrangement/shape_params
+        # (shape param keys adalah kunci, bukan variabel bebas).
+        names = set(base_names)
+        for key, child in rebar.items():
+            scan(child, f"{base}/{key}", names)
+
+        arrangement = rebar.get("arrangement")
+        if not isinstance(arrangement, dict):
+            continue
+        pattern = arrangement.get("pattern")
+        if pattern == "polar":
+            by = arrangement.get("by")
+            count_raw = arrangement.get("count")
+            count_ok = True
+            try:
+                count_val = int(count_raw) if count_raw is not None else 0
+            except (TypeError, ValueError):
+                count_ok = False
+                count_val = 0
+            if by != "count" or not count_ok or count_val < 1:
+                issues.append(
+                    Issue(
+                        "error",
+                        "ARR_BAD",
+                        f"{base}/arrangement",
+                        "Arrangement polar wajib by=count dan count >= 1",
+                    )
+                )
+        if (
+            pattern == "linear"
+            and definition.get("type") == "bored_pile"
+            and arrangement.get("axis") != "z"
+        ):
+            issues.append(
+                Issue(
+                    "error",
+                    "ARR_BAD",
+                    f"{base}/arrangement",
+                    "Arrangement linear bored pile hanya mendukung axis z",
+                )
+            )
+    return issues
+
+
 def _cross_checks(doc: dict[str, Any]) -> list[Issue]:
     issues: list[Issue] = []
     kind = doc.get("kind")
@@ -287,6 +389,7 @@ def _cross_checks(doc: dict[str, Any]) -> list[Issue]:
         _zone_rest_issues(definition.get("zones") or [], "/definition/zones", issues)
         _ref_missing_for_definition(definition, shapes, "/definition", issues)
         _pos_cycle_issues(definition.get("rebars") or [], "/definition/rebars", issues)
+        issues.extend(_expression_and_arrangement_issues(definition, "/definition", shapes))
 
     elif kind == "project":
         groups = doc.get("groups") or []
@@ -296,26 +399,47 @@ def _cross_checks(doc: dict[str, Any]) -> list[Issue]:
         for gi, g in enumerate(groups):
             instances = g.get("instances") or []
             _check_id_dup_in_list(instances, f"/groups/{gi}/instances", issues)
-            
+
+            zones_def = (
+                ((g.get("definition") or {}).get("data") or {}).get("zones") or []
+            )
+            rest_zone_ids: set[str] = set()
+            if isinstance(zones_def, list):
+                for z in zones_def:
+                    if isinstance(z, dict) and z.get("length") == "rest":
+                        zid = z.get("id")
+                        if zid is not None:
+                            rest_zone_ids.add(str(zid))
+
             for ii, inst in enumerate(instances):
+                if not isinstance(inst, dict):
+                    continue
                 if inst.get("id"):
                     all_pile_ids.append((str(inst["id"]), f"/groups/{gi}"))
-            
-                # 👇 TAMBAHKAN BLOK INI DI SINI (Validasi Instance Override Zona Rest) 👇
-                zones_def = (g.get("definition", {}).get("data", {}) or {}).get("zones") or []
-                rest_zone_ids = {z["id"] for z in zones_def if z.get("length") == "rest"}
-            
+
                 overrides = inst.get("overrides") or {}
-                zone_lengths = overrides.get("zone_lengths") or {}
-                for zid, length_val in zone_lengths.items():
+                if not isinstance(overrides, dict):
+                    continue
+                zone_lengths = overrides.get("zone_lengths")
+                if not isinstance(zone_lengths, dict):
+                    continue
+                pile_id = str(inst.get("id") or f"index-{ii}")
+                for zid in zone_lengths:
                     if zid in rest_zone_ids:
-                        issues.append(Issue(
-                            level="error",
-                            code="ZONE_REST_OVERRIDE",
-                            path=f"/groups/{gi}/instances/{ii}/overrides/zone_lengths/{zid}",
-                            message=f"Zona rest '{zid}' tidak boleh di-override"
-                        ))
-                # 👆 AKHIR BLOK TAMBAHAN 👆
+                        issues.append(
+                            Issue(
+                                level="error",
+                                code="ZONE_REST_OVERRIDE",
+                                path=(
+                                    f"/groups/{gi}/instances/{ii}/"
+                                    f"overrides/zone_lengths/{zid}"
+                                ),
+                                message=(
+                                    f"Override zona rest '{zid}' pada pile "
+                                    f"'{pile_id}' tidak diizinkan"
+                                ),
+                            )
+                        )
 
             # dup across project
             definition = (g.get("definition") or {}).get("data") or {}
@@ -336,6 +460,23 @@ def _cross_checks(doc: dict[str, Any]) -> list[Issue]:
                 definition.get("rebars") or [],
                 f"/groups/{gi}/definition/data/rebars",
                 issues,
+            )
+            if g.get("type") != definition.get("type"):
+                issues.append(
+                    Issue(
+                        level="error",
+                        code="TYPE_MISMATCH",
+                        path=f"/groups/{gi}/type",
+                        message=(
+                            f"Tipe grup '{g.get('type')}' berbeda dari tipe definisi "
+                            f"'{definition.get('type')}'"
+                        ),
+                    )
+                )
+            issues.extend(
+                _expression_and_arrangement_issues(
+                    definition, f"/groups/{gi}/definition/data", shapes
+                )
             )
             # HASH_DIFF
             source = (g.get("definition") or {}).get("source")

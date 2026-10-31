@@ -23,9 +23,10 @@ JSON adalah satu-satunya sumber data. Gambar 2D, model 3D, rekap, dan pemeriksaa
 - `tools/check_examples.py` dan `tools/mini_validate.py` — pemeriksa minimal (bukan pengganti paket `jsonschema`)
 
 ## Kode galat
-`SCHEMA`(error) `ID_DUP`(error) `REF_MISSING`(error) `ZONE_REST_POS`(error) `ZONE_DEPTH_SHORT`(error) `ZONE_REST_OVERRIDE`(error) `EXPR`(error) `SHAPE_PARAM`(error) `POS_CYCLE`(error) `POS_REF_AMBIGUOUS`(error) `ARR_BAD`(error) `OUT_OF_ELEMENT`(error) `LEN_MISMATCH`(warning) `RULE_SPACING`(warning) `RULE_COVER`(warning) `ZONE_GAP`(warning) `END_GAP`(info) `HASH_DIFF`(info).
+`SCHEMA`(error) `ID_DUP`(error) `REF_MISSING`(error) `ZONE_REST_POS`(error) `ZONE_DEPTH_SHORT`(error) `ZONE_REST_OVERRIDE`(error) `EXPR`(error) `SHAPE_PARAM`(error) `POS_CYCLE`(error) `POS_REF_AMBIGUOUS`(error) `ARR_BAD`(error) `TYPE_MISMATCH`(error) `OUT_OF_ELEMENT`(error) `LEN_MISMATCH`(warning) `RULE_SPACING`(warning) `RULE_COVER`(warning) `ZONE_GAP`(warning) `END_GAP`(info) `HASH_DIFF`(info).
 Pesan galat dalam bahasa Indonesia, menyebut path JSON Pointer (mis. `/groups/0/instances/1/overrides`).
 `ZONE_REST_OVERRIDE`: lihat keputusan D6 di atas.
+`TYPE_MISMATCH`: `group.type` harus sama dengan `definition.data.type`.
 
 ## Kontrak antarmuka Python (paket `scad`, di `core/scad/`)
 ```python

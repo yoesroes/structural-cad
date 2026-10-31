@@ -115,6 +115,85 @@ def evaluate(
     return _to_finite_float(result, f"ekspresi {value!r}")
 
 
+# Fungsi yang menerima argumen string (nama id / parameter)
+_STRING_ARG_FUNCS = frozenset({"d_of", "zone_length", "shape_param"})
+
+
+def check_expression(
+    text: str,
+    allowed_names: set[str] | None = None,
+    allowed_funcs: set[str] | None = None,
+) -> list[str]:
+    """Periksa sintaks, node AST, dan nama ekspresi tanpa mengevaluasinya.
+
+    Konstanta string hanya diizinkan sebagai argumen `d_of`, `zone_length`,
+    atau `shape_param`. Argumen kata kunci ditolak.
+    """
+    errors: list[str] = []
+    if not isinstance(text, str) or not text.strip().startswith("="):
+        return ["String ekspresi harus berawalan '='"]
+    body = text.strip()[1:].strip()
+    if not body:
+        return ["Ekspresi kosong"]
+    try:
+        tree = ast.parse(body, mode="eval")
+    except SyntaxError as exc:
+        return [f"Sintaks ekspresi tidak valid: {exc.msg}"]
+    names = set(allowed_names or ()) | {"pi"}
+    funcs = set(allowed_funcs or ()) | _ALLOWED_FUNC_NAMES
+    allowed_bin = tuple(_BIN_OPS)
+    allowed_unary = tuple(_UNARY_OPS)
+
+    def visit(node: ast.AST, *, allow_string: bool = False) -> None:
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool) or node.value is None:
+                errors.append("Konstanta tidak diizinkan")
+                return
+            if isinstance(node.value, str):
+                if not allow_string:
+                    errors.append(
+                        "Konstanta string hanya diizinkan sebagai argumen "
+                        "d_of/zone_length/shape_param"
+                    )
+                return
+            if isinstance(node.value, (int, float)):
+                return
+            errors.append("Konstanta tidak diizinkan")
+            return
+        if isinstance(node, ast.Name):
+            if node.id not in names:
+                errors.append(f"Variabel tidak dikenal '{node.id}'")
+            return
+        if isinstance(node, ast.BinOp):
+            if not isinstance(node.op, allowed_bin):
+                errors.append("Operator biner tidak diizinkan")
+            visit(node.left)
+            visit(node.right)
+            return
+        if isinstance(node, ast.UnaryOp):
+            if not isinstance(node.op, allowed_unary):
+                errors.append("Operator unary tidak diizinkan")
+            visit(node.operand)
+            return
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name) or node.func.id not in funcs:
+                errors.append("Fungsi tidak dikenal atau tidak diizinkan")
+                return
+            string_ok = node.func.id in _STRING_ARG_FUNCS
+            for arg in node.args:
+                visit(arg, allow_string=string_ok)
+            if node.keywords:
+                errors.append("Argumen kata kunci tidak diizinkan")
+            return
+        if isinstance(node, (ast.Attribute, ast.Subscript)):
+            errors.append(f"Node AST tidak didukung: {type(node).__name__}")
+            return
+        errors.append(f"Node AST tidak didukung: {type(node).__name__}")
+
+    visit(tree.body)
+    return errors
+
+
 def _eval_node(
     node: ast.AST,
     variables: dict[str, float],
@@ -156,9 +235,15 @@ def _eval_node(
             raise ExprError(f"Pembagian nol dalam ekspresi {source!r}")
         try:
             result = _BIN_OPS[op_type](left, right)
-        except OverflowError as exc:
-            raise ExprError(f"Hasil di luar jangkauan dalam {source!r}") from exc
-        if not math.isfinite(result):
+        except (OverflowError, ZeroDivisionError, ValueError, TypeError) as exc:
+            raise ExprError(f"Operasi aritmetika gagal dalam {source!r}: {exc}") from exc
+        if isinstance(result, complex):
+            raise ExprError(f"Hasil kompleks tidak diizinkan dalam {source!r}")
+        try:
+            finite = math.isfinite(result)
+        except (TypeError, ValueError) as exc:
+            raise ExprError(f"Hasil bukan angka real dalam {source!r}") from exc
+        if not finite:
             raise ExprError(f"Hasil tidak finite dalam ekspresi {source!r}")
         return float(result)
 

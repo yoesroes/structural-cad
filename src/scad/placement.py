@@ -319,8 +319,10 @@ def place_rebar(item: dict, env: PileEnv) -> list[Placed]:
 
     if pattern == "polar":
         count = int(arr.get("count") or 0)
+        if count < 1:
+            raise ValueError("count polar harus >= 1")
         bundle = int(arr.get("bundle") or 1)
-        start_angle = float(arr.get("start_angle") or 0.0)
+        start_angle = float(arr.get("start_angle_deg") or 0.0)
         r = axis_radius(item, env)
         if btype == "straight":
             cl = build_centerline(

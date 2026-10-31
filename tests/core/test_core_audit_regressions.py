@@ -1,4 +1,4 @@
-"""Tes regresi audit: S6 zona rest, ZONE_GAP, issue pile (S7 xfail hingga P3)."""
+"""Tes regresi audit: S6 zona rest, ZONE_GAP, issue pile (regresi S7 setelah P3)."""
 from __future__ import annotations
 
 import json
@@ -192,7 +192,6 @@ def test_resolve_skips_pile_cap_without_depth_error():
     assert "PC-G" in gids
 
 
-@pytest.mark.xfail(strict=True, reason="S7")
 def test_invalid_power_expressions_raise_expr_error():
     for expression in ("=(0-8)**(1/3)", "=0**-1"):
         with pytest.raises(ExprError):

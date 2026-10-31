@@ -158,3 +158,41 @@ def test_valid_sqrt():
 
 def test_valid_variable_multiplication():
     assert evaluate("=d*2", {"d": 10}) == 20.0
+
+
+# --- check_expression (P3b) ---
+
+from scad.expr import check_expression
+
+
+def test_check_expression_rejects_injection_and_syntax():
+    assert check_expression("=__import__('os')", {"d"}, set())
+    assert check_expression("=1+", {"d"}, set())  # sintaks rusak
+    assert any("tidak dikenal" in m or "tidak diizinkan" in m for m in check_expression("=foo(1)", {"d"}, set()))
+
+
+def test_check_expression_rejects_kwargs_and_attribute():
+    msgs = check_expression("=min(1, x=2)", set(), {"min"})
+    assert any("kata kunci" in m for m in msgs)
+    msgs = check_expression("=(1).real", set(), set())
+    assert msgs  # attribute/node tidak didukung
+
+
+def test_check_expression_string_constant_only_in_allowed_funcs():
+    ok_names = {"d", "cover", "diameter", "pi"}
+    funcs = {"d_of", "zone_length", "shape_param", "min"}
+    assert check_expression("=d_of('B2')", ok_names, funcs) == []
+    assert check_expression("=zone_length('Z0')", ok_names, funcs) == []
+    assert check_expression("=shape_param('B2','A','Z1')", ok_names, funcs) == []
+    bad = check_expression("='a'+1", ok_names, funcs)
+    assert any("string" in m.lower() or "Konstanta string" in m for m in bad)
+    bad2 = check_expression("=min('a', 1)", ok_names, funcs)
+    assert any("string" in m.lower() or "Konstanta string" in m for m in bad2)
+
+
+def test_check_expression_unknown_name():
+    msgs = check_expression("=A*2", {"d", "cover", "diameter", "pi"}, set())
+    assert any("A" in m for m in msgs)
+    msgs = check_expression("=r*2", {"d", "cover", "diameter", "pi"}, set())
+    assert any("r" in m for m in msgs)
+    assert check_expression("=40*d", {"d", "cover", "diameter", "pi"}, set()) == []

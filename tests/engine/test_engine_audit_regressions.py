@@ -25,7 +25,6 @@ def rebar(doc: dict, rid: str) -> dict:
     )
 
 
-@pytest.mark.xfail(strict=True, reason="T3")
 def test_polar_spacing_rejected_with_arr_bad_and_build_raises():
     """D2: polar by spacing harus ditolak (ARR_BAD), bukan menghilangkan batang.
 
@@ -47,7 +46,6 @@ def test_polar_spacing_rejected_with_arr_bad_and_build_raises():
         build_bar_groups(doc, "P1-1")
 
 
-@pytest.mark.xfail(strict=True, reason="T3")
 def test_polar_start_angle_deg_changes_first_origin():
     baseline = build_bar_groups(load_p1(), "P1-1")
     shifted_doc = load_p1()
