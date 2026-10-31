@@ -221,7 +221,11 @@ def _commit(doc: dict, target: Path | None = None) -> tuple[bool, dict]:
 
 
 def _pile_ids_from_issue_path(doc: dict, path: str) -> set[str] | None:
-    """Petakan JSON Pointer issue ke id pile, atau None bila bukan path instance."""
+    """Petakan JSON Pointer issue ke id pile, atau None bila bukan path instance.
+
+    None = issue global / pointer tidak bisa dipetakan → pemanggil harus memblokir.
+    Pointer rusak atau id hilang diperlakukan sebagai global (fail-closed), bukan diabaikan.
+    """
     parts = [p for p in (path or "").strip("/").split("/") if p]
     if len(parts) >= 4 and parts[0] == "groups" and parts[2] == "instances":
         try:
@@ -229,9 +233,11 @@ def _pile_ids_from_issue_path(doc: dict, path: str) -> set[str] | None:
             ii = int(parts[3])
             inst = ((doc.get("groups") or [])[gi].get("instances") or [])[ii]
             pid = inst.get("id")
-            return {pid} if pid else set()
+            if not pid:
+                return None
+            return {pid}
         except (ValueError, IndexError, TypeError, KeyError, AttributeError):
-            return set()
+            return None
     return None
 
 

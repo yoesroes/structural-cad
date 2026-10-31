@@ -1,6 +1,8 @@
 """Regression test P0/P1/P1b untuk state server dan batas HTTP."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import copy
 import json
 import urllib.error
@@ -188,13 +190,8 @@ def test_untitled_project_keeps_path_none_after_pile_edit(ui_server):
     )["overrides"]["params"]["depth_below_cof"] == 28000
 
 
-def test_edit_healthy_pile_while_other_pile_infeasible(ui_server):
-    """P1b: error resolve pada pile lain tidak menolak edit pile sehat."""
-    base = ui_server["base"]
-    status, _ = request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
-    assert status == 200
-
-    # Tanpa lewat API: tanam override infeasibel pada P1-6 di dokumen sesi.
+def _plant_infeasible_p16() -> None:
+    """Tanam override depth 5000 pada P1-6 di dokumen sesi (tanpa lewat API)."""
     doc = copy.deepcopy(ui_mod.CURRENT_DOC)
     for group in doc["groups"]:
         for inst in group.get("instances") or []:
@@ -205,12 +202,74 @@ def test_edit_healthy_pile_while_other_pile_infeasible(ui_server):
     ui_mod.CURRENT_DOC = doc
     ui_mod.DIRTY = True
 
+
+def test_edit_healthy_pile_while_other_pile_infeasible(ui_server):
+    """P1b: error resolve pada pile lain tidak menolak edit pile sehat."""
+    base = ui_server["base"]
+    status, _ = request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
+    assert status == 200
+    _plant_infeasible_p16()
+
     status, body = request(base, "POST", "/api/pile/P1-1/depth", {"depth": 29000})
     assert status == 200
     assert body["ok"] is True
     assert instance_by_id(ui_mod.CURRENT_DOC, "P1-1")["overrides"]["params"][
         "depth_below_cof"
     ] == 29000
+
+
+def test_edit_infeasible_pile_still_rejected(ui_server):
+    """Lawan filter: mengedit P1-6 yang masih infeasibel harus 400 + ZONE_DEPTH_SHORT."""
+    base = ui_server["base"]
+    status, _ = request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
+    assert status == 200
+    _plant_infeasible_p16()
+    before = copy.deepcopy(ui_mod.CURRENT_DOC)
+
+    status, body = request(base, "POST", "/api/pile/P1-6/depth", {"depth": 6000})
+    assert status == 400
+    assert body["ok"] is False
+    assert any(issue["code"] == "ZONE_DEPTH_SHORT" for issue in body["issues"])
+    assert ui_mod.CURRENT_DOC == before
+
+
+def test_edit_infeasible_pile_to_feasible_accepted(ui_server):
+    """Lawan filter: mengedit P1-6 dari infeasibel ke depth 30000 (default) harus 200.
+
+    Ops memangkas override bila nilai = default grup; yang diuji adalah HTTP 200
+    dan kedalaman efektif 30000, bukan kehadiran kunci override.
+    """
+    base = ui_server["base"]
+    status, _ = request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
+    assert status == 200
+    _plant_infeasible_p16()
+
+    status, body = request(base, "POST", "/api/pile/P1-6/depth", {"depth": 30000})
+    assert status == 200
+    assert body["ok"] is True
+    inst = instance_by_id(ui_mod.CURRENT_DOC, "P1-6")
+    params = (inst.get("overrides") or {}).get("params") or {}
+    assert params.get("depth_below_cof", 30000) == 30000
+    if body.get("pile") is not None:
+        assert body["pile"].get("depth_below_cof") == 30000
+
+
+def test_pile_ids_from_issue_path_mapping():
+    """Unit: path valid, path definisi, indeks OOB, path kosong → fail-closed."""
+    from scad_ui.server import _pile_ids_from_issue_path
+
+    doc = read_project(Path(__file__).resolve().parents[2] / "examples" / "P1.project.json")
+    assert _pile_ids_from_issue_path(doc, "/groups/0/instances/0") == {"P1-1"}
+    assert _pile_ids_from_issue_path(doc, "/groups/0/instances/5") == {"P1-6"}
+    # Path definisi / non-instance → global (None)
+    assert _pile_ids_from_issue_path(doc, "/groups/0/definition") is None
+    assert _pile_ids_from_issue_path(doc, "/kind") is None
+    # Indeks di luar jangkauan → None (fail-closed)
+    assert _pile_ids_from_issue_path(doc, "/groups/0/instances/999") is None
+    assert _pile_ids_from_issue_path(doc, "/groups/99/instances/0") is None
+    # Path kosong / rusak → None
+    assert _pile_ids_from_issue_path(doc, "") is None
+    assert _pile_ids_from_issue_path(doc, "/groups/x/instances/y") is None
 
 
 @pytest.mark.xfail(strict=True, reason="S2")

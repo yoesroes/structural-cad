@@ -243,12 +243,13 @@ def test_update_from_source_invalid_zone_cancels(ui_server):
     status, opened = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
     assert status == 200
     original = copy.deepcopy(opened["project"])
-    # Cari instance pertama berdasarkan id, bukan indeks tetap.
-    first_id = original["groups"][0]["instances"][0]["id"]
-    for inst in original["groups"][0]["instances"]:
-        if inst["id"] == first_id:
-            inst["overrides"] = {"zone_lengths": {"MISSING": 1}}
-            break
+    target = next(
+        inst
+        for group in original["groups"]
+        for inst in group["instances"]
+        if inst["id"] == "P1-1"
+    )
+    target["overrides"] = {"zone_lengths": {"MISSING": 1}}
     ui_mod.CURRENT_DOC = original
     source = json.loads((workspace / "BP_D1200.elem.json").read_text(encoding="utf-8"))
     source["definition"]["name"] = "Should not apply"
