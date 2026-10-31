@@ -52,6 +52,12 @@ def resolve_zones(
     Urutan hasil = urutan masukan. Zona above_cof bertumpuk ke atas dari z=0;
     below_cof bertumpuk ke bawah dari z=0.
     """
+
+    if zone_lengths:
+        for z in zones:
+            if z.get("length") == "rest" and z.get("id") in zone_lengths:
+                raise ZoneError("ZONE_REST_OVERRIDE", f"Zona rest '{z.get('id')}' tidak boleh di-override panjangnya")
+ 
     if depth_below_cof is None:
         raise ZoneError(
             "ZONE_DEPTH_SHORT",

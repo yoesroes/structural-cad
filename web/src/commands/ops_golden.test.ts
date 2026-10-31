@@ -35,12 +35,13 @@ describe("ops golden (parity with Python)", () => {
       const op = c.op as any;
 
       if (c.expect_error) {
-        // TS apply tidak throw; verifikasi tidak mengubah doc untuk pile tak ada
-        // Kasus error ketat diuji di Python. Untuk value <= 0, apply masih menulis —
-        // skip ketat di TS kecuali pile/zone missing path.
+        if (c.id.includes("rest")) {
+          assert.throws(() => applyOperation(doc, op));
+          return;
+        }
+        // TS apply tidak throw untuk value <= 0; pile/zone missing → inverse null
         if (c.id.includes("pile_missing") || c.id.includes("zone_missing")) {
-          const { doc: next, inverse } = applyOperation(doc, op);
-          // group/pile not found → no change
+          const { inverse } = applyOperation(doc, op);
           assert.equal(inverse, null);
         }
         return;

@@ -39,6 +39,12 @@ function definitionZoneLength(group: any, zoneId: string): number | undefined {
   return undefined;
 }
 
+function zoneIsRest(group: any, zoneId: string): boolean {
+  const zones = group?.definition?.data?.zones as any[] | undefined;
+  if (!zones) return false;
+  return zones.some((z) => z?.id === zoneId && z?.length === "rest");
+}
+
 /** Hapus kunci kosong bertingkat pada overrides. */
 function pruneOverrides(inst: any): void {
   if (!inst.overrides) return;
@@ -136,6 +142,9 @@ export function applyOperation(doc: ProjectDoc, op: Operation): ApplyResult {
       if (!zones.some((z) => z?.id === op.zone)) {
         return { doc: next, inverse: null };
       }
+      if (zoneIsRest(group, op.zone)) {
+        throw new Error(`Zona '${op.zone}' bertipe rest tidak boleh di-override`);
+      }
       const prev =
         typeof inst.overrides?.zone_lengths?.[op.zone] === "number"
           ? inst.overrides.zone_lengths[op.zone]
@@ -189,6 +198,11 @@ export function applyOperation(doc: ProjectDoc, op: Operation): ApplyResult {
         typeof inst.overrides?.zone_lengths?.[op.zone] === "number"
           ? inst.overrides.zone_lengths[op.zone]
           : undefined;
+      if (zoneIsRest(group, op.zone) && prev === undefined) {
+        throw new Error(
+          `Zona '${op.zone}' bertipe rest tidak punya override untuk di-reset`,
+        );
+      }
       if (prev === undefined) {
         return { doc: next, inverse: null };
       }

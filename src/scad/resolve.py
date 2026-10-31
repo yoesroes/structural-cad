@@ -9,7 +9,9 @@ from scad.zones import ZoneError, resolve_zones
 
 
 def resolve_project(doc: dict[str, Any]) -> dict[str, Any]:
-    """Kembalikan ResolveResponse: groups[].piles[] + issues."""
+    """Kembalikan ResolveResponse: groups[].piles[] + issues.
+    Issue dari instance memuat field `pile` dan path JSON Pointer instance.
+    """
     issues = [i for i in validate_document(doc) if i.level == "error"]
     out_groups: list[dict[str, Any]] = []
 
@@ -34,6 +36,33 @@ def resolve_project(doc: dict[str, Any]) -> dict[str, Any]:
         if base_depth is None:
             base_depth = (definition.get("params") or {}).get("depth_below_cof")
 
+        gtype = (
+            g.get("type")
+            or (g.get("definition") or {}).get("type")
+            or definition.get("type")
+        )
+        # Grup tanpa semantik kedalaman/zona (mis. pile_cap): lewati resolve zona.
+        if gtype == "pile_cap" or (
+            gtype not in (None, "bored_pile")
+            and not zones_def
+            and base_depth is None
+        ):
+            skip_piles = []
+            for inst in g.get("instances") or []:
+                skip_piles.append(
+                    {
+                        "id": inst.get("id"),
+                        "x": inst.get("x"),
+                        "y": inst.get("y"),
+                        "depth_below_cof": None,
+                        "overridden": [],
+                        "zones": [],
+                    }
+                )
+            out_groups.append({"id": g.get("id"), "piles": skip_piles})
+            continue
+
+        has_rest = any(z.get("length") == "rest" for z in zones_def)
         piles: list[dict[str, Any]] = []
         for ii, inst in enumerate(g.get("instances") or []):
             depth = base_depth
@@ -48,13 +77,15 @@ def resolve_project(doc: dict[str, Any]) -> dict[str, Any]:
                 for zid in zone_lengths:
                     overridden.append(f"zone:{zid}")
 
+            pile_id = inst.get("id")
+            path = f"/groups/{gi}/instances/{ii}"
             pile_issues: list[dict[str, Any]] = []
             zones_out: list[dict[str, Any]] = []
             try:
                 if depth is None:
                     raise ZoneError(
                         "ZONE_DEPTH_SHORT",
-                        f"Pile {inst.get('id')}: depth_below_cof tidak tersedia",
+                        f"Pile {pile_id}: depth_below_cof tidak tersedia",
                     )
                 resolved = resolve_zones(zones_def, float(depth), zone_lengths)
                 zones_out = [
@@ -67,12 +98,29 @@ def resolve_project(doc: dict[str, Any]) -> dict[str, Any]:
                     }
                     for z in resolved
                 ]
+                # Tanpa rest, gap di bawah COF adalah warning dan tidak memblokir.
+                if not has_rest:
+                    below_sum = sum(
+                        float(z.length) for z in resolved if z.side == "below_cof"
+                    )
+                    gap = float(depth) - below_sum
+                    if gap > 1e-9:
+                        pile_issues.append(
+                            {
+                                "level": "warning",
+                                "code": "ZONE_GAP",
+                                "path": path,
+                                "pile": pile_id,
+                                "message": f"Zona below_cof tidak menutup depth (selisih {gap:g} mm)",
+                            }
+                        )
             except ZoneError as e:
                 pile_issues.append(
                     {
                         "level": "error",
                         "code": e.code,
-                        "path": f"/groups/{gi}/instances/{ii}",
+                        "path": path,
+                        "pile": pile_id,
                         "message": str(e),
                     }
                 )

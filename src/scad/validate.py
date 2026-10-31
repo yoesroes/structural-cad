@@ -296,9 +296,27 @@ def _cross_checks(doc: dict[str, Any]) -> list[Issue]:
         for gi, g in enumerate(groups):
             instances = g.get("instances") or []
             _check_id_dup_in_list(instances, f"/groups/{gi}/instances", issues)
-            for inst in instances:
+            
+            for ii, inst in enumerate(instances):
                 if inst.get("id"):
                     all_pile_ids.append((str(inst["id"]), f"/groups/{gi}"))
+            
+                # 👇 TAMBAHKAN BLOK INI DI SINI (Validasi Instance Override Zona Rest) 👇
+                zones_def = (g.get("definition", {}).get("data", {}) or {}).get("zones") or []
+                rest_zone_ids = {z["id"] for z in zones_def if z.get("length") == "rest"}
+            
+                overrides = inst.get("overrides") or {}
+                zone_lengths = overrides.get("zone_lengths") or {}
+                for zid, length_val in zone_lengths.items():
+                    if zid in rest_zone_ids:
+                        issues.append(Issue(
+                            level="error",
+                            code="ZONE_REST_OVERRIDE",
+                            path=f"/groups/{gi}/instances/{ii}/overrides/zone_lengths/{zid}",
+                            message=f"Zona rest '{zid}' tidak boleh di-override"
+                        ))
+                # 👆 AKHIR BLOK TAMBAHAN 👆
+
             # dup across project
             definition = (g.get("definition") or {}).get("data") or {}
             _check_id_dup_in_list(

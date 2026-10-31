@@ -56,6 +56,15 @@ def zone_exists(group: dict[str, Any], zone_id: str) -> bool:
     return any(z.get("id") == zone_id for z in (definition.get("zones") or []))
 
 
+def zone_is_rest(group: dict[str, Any], zone_id: str) -> bool:
+    """True bila definisi zona memakai length 'rest'."""
+    definition = (group.get("definition") or {}).get("data") or {}
+    return any(
+        z.get("id") == zone_id and z.get("length") == "rest"
+        for z in (definition.get("zones") or [])
+    )
+
+
 def _prune_overrides(inst: dict[str, Any]) -> None:
     ovr = inst.get("overrides")
     if not isinstance(ovr, dict):
@@ -148,6 +157,8 @@ def apply_operation(
             raise ValueError("Operasi set_pile_zone_length membutuhkan zone")
         if not zone_exists(group, str(zone)):
             raise ValueError(f"Zona '{zone}' tidak ditemukan di definisi grup '{group_id}'")
+        if zone_is_rest(group, str(zone)):
+            raise ValueError(f"Zona '{zone}' bertipe rest tidak boleh di-override")
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not (value > 0):
             raise ValueError("Panjang zona harus angka > 0")
         value = float(value)
@@ -199,7 +210,14 @@ def apply_operation(
         if inst.get("overrides") and isinstance(inst["overrides"].get("zone_lengths"), dict):
             if zone in inst["overrides"]["zone_lengths"]:
                 prev = float(inst["overrides"]["zone_lengths"][zone])
-        if prev is None:
+        # Zona rest: reset diizinkan HANYA untuk menghapus override tersimpan.
+        if zone_is_rest(group, str(zone)):
+            if prev is None:
+                raise ValueError(
+                    f"Zona '{zone}' bertipe rest tidak punya override untuk di-reset"
+                )
+            # lanjut hapus override di bawah
+        elif prev is None:
             return next_doc, None
         inverse = {
             "op": "set_pile_zone_length",
