@@ -59,6 +59,16 @@ Project dan elemen harus berupa dokumen v1 dengan `schema_version: 1`. Operasi f
 memvalidasi dokumen sebelum menulis dan menggunakan path relatif terhadap workspace;
 path keluar workspace ditolak.
 
+### Kode galat zona (keputusan D6)
+
+- **`ZONE_REST_OVERRIDE` (error):** override pada zona `rest` tidak boleh dibuat lewat
+  edit apa pun. Dokumen yang sudah memuat override tersebut tetap invalid: ditolak saat
+  open, save, dan save-as dengan HTTP 400. Tidak ada pemangkasan otomatis saat membuka —
+  batasan disengaja, karena aplikasi yang benar tidak pernah menulis override itu.
+- `reset_pile_zone_length` pada zona `rest` tetap ada hanya untuk skrip dan tes (menghapus
+  override yang sudah tersimpan), bukan jalur perbaikan lewat UI.
+- Jalur `update-from-source` yang masih memiliki celah terkait aturan ini ditutup di tugas P6.
+
 ## Frontend dan pengujian
 
 `web/src/commands/` berisi logika perintah murni (`SET`, `RESET`, menu file, dan

@@ -12,6 +12,7 @@ JSON adalah satu-satunya sumber data. Gambar 2D, model 3D, rekap, dan pemeriksaa
 5. Zona dihitung dari COF. Zona `above_cof` bertumpuk ke atas, `below_cof` ke bawah. Satu zona `"rest"` (harus zona below_cof TERAKHIR) menyerap sisa kedalaman. Koordinat z relatif COF, positif ke atas.
 6. Ekspresi = string berawalan `=`. Variabel: parameter elemen, `d` (diameter batang), `r`, `pi`. Fungsi: min max ceil floor round abs sqrt, `d_of('B2')`, `zone_length('Z1')` (menggantikan notasi `zone('Z1').length` di dokumen spesifikasi). Tanpa akses atribut/loop/pemanggilan lain.
 7. Kunci tak dikenal ditolak, kecuali berawalan `x_` atau di bawah `meta`.
+8. **D6 = opsi B:** override pada zona `rest` tidak boleh dibuat lewat edit apa pun, dan dokumen yang sudah memuatnya tetap invalid (ditolak saat open, save, save-as dengan 400; tanpa pemangkasan otomatis). Alasan: aplikasi yang benar tidak pernah menulis override itu; pemangkasan diam-diam akan menyembunyikan korupsi data.
 
 ## Berkas acuan (jangan diubah)
 - `schemas/scad.schema.json` — JSON Schema 2020-12 (entri: `kind` = element | project | shape_library)
@@ -22,8 +23,9 @@ JSON adalah satu-satunya sumber data. Gambar 2D, model 3D, rekap, dan pemeriksaa
 - `tools/check_examples.py` dan `tools/mini_validate.py` — pemeriksa minimal (bukan pengganti paket `jsonschema`)
 
 ## Kode galat
-`SCHEMA`(error) `ID_DUP`(error) `REF_MISSING`(error) `ZONE_REST_POS`(error) `ZONE_DEPTH_SHORT`(error) `EXPR`(error) `SHAPE_PARAM`(error) `POS_CYCLE`(error) `POS_REF_AMBIGUOUS`(error) `ARR_BAD`(error) `OUT_OF_ELEMENT`(error) `LEN_MISMATCH`(warning) `RULE_SPACING`(warning) `RULE_COVER`(warning) `END_GAP`(info) `HASH_DIFF`(info).
+`SCHEMA`(error) `ID_DUP`(error) `REF_MISSING`(error) `ZONE_REST_POS`(error) `ZONE_DEPTH_SHORT`(error) `ZONE_REST_OVERRIDE`(error) `EXPR`(error) `SHAPE_PARAM`(error) `POS_CYCLE`(error) `POS_REF_AMBIGUOUS`(error) `ARR_BAD`(error) `OUT_OF_ELEMENT`(error) `LEN_MISMATCH`(warning) `RULE_SPACING`(warning) `RULE_COVER`(warning) `ZONE_GAP`(warning) `END_GAP`(info) `HASH_DIFF`(info).
 Pesan galat dalam bahasa Indonesia, menyebut path JSON Pointer (mis. `/groups/0/instances/1/overrides`).
+`ZONE_REST_OVERRIDE`: lihat keputusan D6 di atas.
 
 ## Kontrak antarmuka Python (paket `scad`, di `core/scad/`)
 ```python

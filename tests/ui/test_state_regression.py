@@ -270,6 +270,88 @@ def test_api_rest_zone_override_rejected(ui_server):
     assert "rest" in body.get("error", "").lower()
 
 
+def _project_with_rest_override() -> dict:
+    """P1 dengan override zona rest pada P1-1/Z3 (dokumen invalid menurut D6)."""
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    doc = read_project(repo / "examples" / "P1.project.json")
+    for inst in doc["groups"][0]["instances"]:
+        if inst["id"] == "P1-1":
+            inst["overrides"] = {"zone_lengths": {"Z3": 17000}}
+            break
+    return doc
+
+
+def test_open_rejects_rest_override_document(ui_server):
+    """D6: open berkas dengan override zona rest → 400, CURRENT_DOC tidak berubah."""
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
+    assert request(base, "POST", "/api/project/open", {"path": "P1.project.json"})[0] == 200
+    before = copy.deepcopy(ui_mod.CURRENT_DOC)
+    assert before is not None
+
+    bad = _project_with_rest_override()
+    (workspace / "bad_rest.project.json").write_text(
+        json.dumps(bad, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+    status, body = request(base, "POST", "/api/project/open", {"path": "bad_rest.project.json"})
+    assert status == 400, body
+    assert body.get("ok") is False
+    err = (body.get("error") or "") + json.dumps(body.get("issues") or [])
+    assert "ZONE_REST_OVERRIDE" in err or "rest" in err.lower()
+    assert ui_mod.CURRENT_DOC == before
+
+
+def test_save_and_save_as_reject_rest_override_document(ui_server):
+    """D6: save dan save-as dokumen dengan override zona rest → 400, tidak ada berkas ditulis."""
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
+    assert request(base, "POST", "/api/project/open", {"path": "P1.project.json"})[0] == 200
+    before_path = ui_mod.CURRENT_PATH
+    before_bytes = before_path.read_bytes() if before_path and before_path.is_file() else None
+
+    bad = _project_with_rest_override()
+
+    status, body = request(base, "POST", "/api/project/save", {"doc": bad})
+    assert status == 400, body
+    assert body.get("ok") is False
+    issues = body.get("issues") or []
+    codes = {i.get("code") for i in issues} if issues else set()
+    err = body.get("error") or ""
+    assert "ZONE_REST_OVERRIDE" in codes or "rest" in err.lower() or "ZONE_REST_OVERRIDE" in err
+    if before_path and before_bytes is not None:
+        assert before_path.read_bytes() == before_bytes
+
+    target = workspace / "from_save_as_rest.project.json"
+    if target.exists():
+        target.unlink()
+    status, body = request(
+        base,
+        "POST",
+        "/api/project/save-as",
+        {"path": "from_save_as_rest.project.json", "doc": bad},
+    )
+    assert status == 400, body
+    assert body.get("ok") is False
+    assert not target.exists()
+    assert list(workspace.glob("*.tmp")) == []
+
+
+def test_api_set_rest_zone_does_not_write_disk(ui_server):
+    """D6: set zona rest lewat API → 400 dan berkas di disk tidak berubah."""
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
+    assert request(base, "POST", "/api/project/open", {"path": "P1.project.json"})[0] == 200
+    p1_path = workspace / "P1.project.json"
+    before = p1_path.read_bytes()
+    status, body = request(base, "POST", "/api/pile/P1-1/zone", {"zone": "Z3", "length": 17000})
+    assert status == 400
+    assert body.get("ok") is False
+    assert p1_path.read_bytes() == before
+
+
 def test_zone_gap_warnings_do_not_block_filter():
     from scad_ui.server import _resolve_errors_for_pile
     issues = [
