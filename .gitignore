@@ -1,31 +1,57 @@
+# ============================================
 # Python
+# ============================================
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
 *.egg-info/
-.pytest_cache/
-.venv/
-venv/
+*.egg
 dist/
 build/
+.eggs/
+*.whl
 
-# Output
+# ============================================
+# Virtual Environment
+# ============================================
+.venv/
+venv/
+env/
+ENV/
+
+# ============================================
+# Testing & Coverage
+# ============================================
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+
+# ============================================
+# Output Aplikasi Structural CAD
+# ============================================
 output/
-
-# Node
-node_modules/
-web/node_modules/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Editor
-.vscode/
-.idea/
-*.swp
-
-# CadQuery/ezdxf
+*.svg
 *.step
 *.stp
-*.dxf
-*.stl
+
+# ============================================
+# IDE & Editor (Termasuk Sublime Text)
+# ============================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# ============================================
+# OS
+# ============================================
+.DS_Store
+Thumbs.db
+desktop.ini

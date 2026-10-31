@@ -158,6 +158,29 @@
         "zone": "Z2",
         "value": 7000
       }
+    },
+    {
+      "id": "set_rest_zone_error",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "set_pile_zone_length",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "zone": "Z3",
+        "value": 17000
+      },
+      "expect_error": true
+    },
+    {
+      "id": "reset_rest_zone_without_override_error",
+      "doc_ref": "examples/P1.project.json",
+      "op": {
+        "op": "reset_pile_zone_length",
+        "group": "BP-P1",
+        "pile": "P1-1",
+        "zone": "Z3"
+      },
+      "expect_error": true
     }
   ]
 }

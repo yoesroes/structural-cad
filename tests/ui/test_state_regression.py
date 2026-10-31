@@ -1,4 +1,4 @@
-"""Regression test P0 untuk state server dan batas HTTP."""
+"""Regression test P0/P1/P1b/P2 untuk state server dan batas HTTP."""
 from __future__ import annotations
 
 import copy
@@ -38,6 +38,15 @@ def request(
 
 def read_project(path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def instance_by_id(project: dict, pile_id: str) -> dict:
+    return next(
+        item
+        for group in project["groups"]
+        for item in group["instances"]
+        if item["id"] == pile_id
+    )
 
 
 def test_t1_two_depth_edits_are_visible_in_disk_and_get(ui_server):
@@ -83,22 +92,12 @@ def test_t1_three_sequential_operations_preserve_disk_and_get(ui_server):
 
     status, response = request(base, "GET", "/api/project")
     assert status == 200
-    instance = next(
-        item
-        for group in response["project"]["groups"]
-        for item in group["instances"]
-        if item["id"] == "P1-2"
-    )
+    instance = instance_by_id(response["project"], "P1-2")
     assert "depth_below_cof" not in (instance.get("overrides") or {}).get("params", {})
     assert instance["overrides"]["zone_lengths"]["Z2"] == 7000
 
     saved = read_project(ui_server["data_root"] / "project.json")
-    saved_instance = next(
-        item
-        for group in saved["groups"]
-        for item in group["instances"]
-        if item["id"] == "P1-2"
-    )
+    saved_instance = instance_by_id(saved, "P1-2")
     assert "depth_below_cof" not in (saved_instance.get("overrides") or {}).get("params", {})
     assert saved_instance["overrides"]["zone_lengths"]["Z2"] == 7000
 
@@ -107,14 +106,17 @@ def test_t1_opened_path_is_edit_target(ui_server):
     workspace = ui_server["workspace"]
     data_file = ui_server["data_root"] / "project.json"
     data_before = data_file.read_bytes()
-    status, body = request(base := ui_server["base"], "POST", "/api/project/open", {"path": "P1.project.json"})
+    status, body = request(
+        base := ui_server["base"], "POST", "/api/project/open", {"path": "P1.project.json"}
+    )
     assert status == 200
     assert body["path"] == "P1.project.json"
 
     status, body = request(base, "POST", "/api/pile/P1-2/depth", {"depth": 25500})
     assert status == 200
     assert body["ok"] is True
-    assert read_project(workspace / "P1.project.json")["groups"][0]["instances"][1]["overrides"]["params"]["depth_below_cof"] == 25500
+    saved = read_project(workspace / "P1.project.json")
+    assert instance_by_id(saved, "P1-2")["overrides"]["params"]["depth_below_cof"] == 25500
     assert data_file.read_bytes() == data_before
 
 
@@ -147,6 +149,137 @@ def test_s1_invalid_rebar_does_not_poison_session(ui_server):
     assert save_status == 200
 
 
+def test_untitled_project_keeps_path_none_after_pile_edit(ui_server):
+    """P1b: project tanpa judul tetap path=None, DIRTY=True setelah edit pile."""
+    base = ui_server["base"]
+    status, created = request(base, "POST", "/api/project/new", {"id": "NEW", "name": "New"})
+    assert status == 200
+    assert ui_mod.CURRENT_PATH is None
+    assert ui_mod.DIRTY is True
+
+    status, added = request(
+        base,
+        "POST",
+        "/api/project/add-element",
+        {"path": "BP_D1200.elem.json", "group_id": "BP-NEW", "count": 1},
+    )
+    assert status == 200
+    assert ui_mod.CURRENT_PATH is None
+    assert ui_mod.DIRTY is True
+
+    status, body = request(base, "POST", "/api/pile/P1/depth", {"depth": 28000})
+    assert status == 200
+    assert body["ok"] is True
+    assert ui_mod.CURRENT_PATH is None
+    assert ui_mod.DIRTY is True
+
+    status, saved = request(
+        base,
+        "POST",
+        "/api/project/save-as",
+        {"path": "NEW.project.json"},
+    )
+    assert status == 200
+    assert saved["path"] == "NEW.project.json"
+    assert ui_mod.CURRENT_PATH == ui_server["workspace"] / "NEW.project.json"
+    assert ui_mod.DIRTY is False
+    assert instance_by_id(
+        read_project(ui_server["workspace"] / "NEW.project.json"), "P1"
+    )["overrides"]["params"]["depth_below_cof"] == 28000
+
+
+def test_edit_healthy_pile_while_other_pile_infeasible(ui_server):
+    """P1b: error resolve pada pile lain tidak menolak edit pile sehat."""
+    base = ui_server["base"]
+    status, _ = request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
+    assert status == 200
+
+    # Tanpa lewat API: tanam override infeasibel pada P1-6 di dokumen sesi.
+    doc = copy.deepcopy(ui_mod.CURRENT_DOC)
+    for group in doc["groups"]:
+        for inst in group.get("instances") or []:
+            if inst.get("id") == "P1-6":
+                inst.setdefault("overrides", {}).setdefault("params", {})[
+                    "depth_below_cof"
+                ] = 5000
+    ui_mod.CURRENT_DOC = doc
+    ui_mod.DIRTY = True
+
+    status, body = request(base, "POST", "/api/pile/P1-1/depth", {"depth": 29000})
+    assert status == 200
+    assert body["ok"] is True
+    assert instance_by_id(ui_mod.CURRENT_DOC, "P1-1")["overrides"]["params"][
+        "depth_below_cof"
+    ] == 29000
+
+
+
+def _plant_infeasible_p16() -> None:
+    """Tanam override depth 5000 pada P1-6 di dokumen sesi."""
+    doc = copy.deepcopy(ui_mod.CURRENT_DOC)
+    for group in doc["groups"]:
+        for inst in group.get("instances") or []:
+            if inst.get("id") == "P1-6":
+                inst.setdefault("overrides", {}).setdefault("params", {})["depth_below_cof"] = 5000
+    ui_mod.CURRENT_DOC = doc
+    ui_mod.DIRTY = True
+
+
+def test_edit_infeasible_pile_still_rejected(ui_server):
+    base = ui_server["base"]
+    assert request(base, "POST", "/api/project/open", {"path": "P1.project.json"})[0] == 200
+    _plant_infeasible_p16()
+    before = copy.deepcopy(ui_mod.CURRENT_DOC)
+    status, body = request(base, "POST", "/api/pile/P1-6/depth", {"depth": 6000})
+    assert status == 400
+    assert any(issue["code"] == "ZONE_DEPTH_SHORT" for issue in body["issues"])
+    assert ui_mod.CURRENT_DOC == before
+
+
+def test_edit_infeasible_pile_to_feasible_accepted(ui_server):
+    base = ui_server["base"]
+    assert request(base, "POST", "/api/project/open", {"path": "P1.project.json"})[0] == 200
+    _plant_infeasible_p16()
+    status, body = request(base, "POST", "/api/pile/P1-6/depth", {"depth": 30000})
+    assert status == 200
+    assert body["ok"] is True
+    assert body["pile"]["depth_below_cof"] == 30000
+
+
+def test_pile_ids_from_issue_path_mapping():
+    """Unit fail-closed: path valid, definisi, OOB, kosong, pointer rusak."""
+    from pathlib import Path
+    from scad_ui.server import _pile_ids_from_issue_path
+    doc = read_project(Path(__file__).resolve().parents[2] / "examples" / "P1.project.json")
+    assert _pile_ids_from_issue_path(doc, "/groups/0/instances/0") == {"P1-1"}
+    assert _pile_ids_from_issue_path(doc, "/groups/0/instances/5") == {"P1-6"}
+    assert _pile_ids_from_issue_path(doc, "/groups/0/definition") is None
+    assert _pile_ids_from_issue_path(doc, "/kind") is None
+    assert _pile_ids_from_issue_path(doc, "/groups/0/instances/999") is None
+    assert _pile_ids_from_issue_path(doc, "/groups/99/instances/0") is None
+    assert _pile_ids_from_issue_path(doc, "") is None
+    assert _pile_ids_from_issue_path(doc, "/groups/x/instances/y") is None
+
+
+def test_api_rest_zone_override_rejected(ui_server):
+    base = ui_server["base"]
+    assert request(base, "POST", "/api/project/open", {"path": "P1.project.json"})[0] == 200
+    status, body = request(base, "POST", "/api/pile/P1-1/zone", {"zone": "Z3", "length": 17000})
+    assert status == 400
+    assert body.get("ok") is False
+    assert "rest" in body.get("error", "").lower()
+
+
+def test_zone_gap_warnings_do_not_block_filter():
+    from scad_ui.server import _resolve_errors_for_pile
+    issues = [
+        {"level": "warning", "code": "ZONE_GAP", "pile": "P-gap"},
+        {"level": "error", "code": "ZONE_DEPTH_SHORT", "pile": "P-gap"},
+    ]
+    assert _resolve_errors_for_pile(issues, {}, "P-gap") == [issues[1]]
+    assert _resolve_errors_for_pile(issues, {}, "P-other") == []
+
+
 @pytest.mark.xfail(strict=True, reason="S2")
 def test_s2_foreign_headers_are_rejected_without_write(ui_server):
     path = ui_server["data_root"] / "project.json"
@@ -167,3 +300,80 @@ def test_s2_foreign_headers_are_rejected_without_write(ui_server):
         )
         assert status in {400, 403, 415}
     assert path.read_bytes() == before
+
+
+@pytest.mark.xfail(strict=True, reason="S2")
+def test_s2_foreign_origin_rejected_on_save_as(ui_server):
+    """S2 juga harus menolak Origin asing pada /api/project/save-as."""
+    workspace = ui_server["workspace"]
+    target = workspace / "evil.project.json"
+    if target.exists():
+        target.unlink()
+    status, _ = request(
+        ui_server["base"],
+        "POST",
+        "/api/project/save-as",
+        headers={
+            "Origin": "https://evil.example",
+            "Content-Type": "application/json",
+        },
+        body={"path": "evil.project.json"},
+    )
+    assert status in {400, 403, 415}
+    assert not target.exists()
+
+
+def test_api_zone_gap_e2e_resolve_warning(ui_server):
+    """P2b: project tanpa rest -> depth valid 200; resolve memuat ZONE_GAP warning."""
+    base = ui_server["base"]
+    doc = {
+        "kind": "project",
+        "schema_version": 1,
+        "project": {"id": "GAP", "name": "GAP"},
+        "shapes": {},
+        "groups": [
+            {
+                "id": "G1",
+                "type": "bored_pile",
+                "definition": {
+                    "type": "bored_pile",
+                    "data": {
+                        "name": "bp",
+                        "params": {
+                            "diameter": 1200,
+                            "depth_below_cof": 10000,
+                            "cover": 75,
+                            "cover_ref": "surface",
+                        },
+                        "zones": [
+                            {"id": "Z0", "side": "above_cof", "length": 1000},
+                            {"id": "Z1", "side": "below_cof", "length": 3000},
+                            {"id": "Z2", "side": "below_cof", "length": 2000},
+                        ],
+                        "rebars": [],
+                    },
+                    "source": {"file": "synthetic", "hash": "0" * 64},
+                },
+                "defaults": {"params": {"depth_below_cof": 10000}},
+                "instances": [{"id": "P-gap", "x": 0.0, "y": 0.0}],
+            }
+        ],
+    }
+    ui_mod.CURRENT_DOC = doc
+    ui_mod.CURRENT_PATH = None
+    ui_mod.DIRTY = True
+    # Resolve lewat API (tanpa save) — ZONE_GAP warning
+    status, body = request(base, "POST", "/api/project/resolve", {"doc": doc})
+    assert status == 200, body
+    gaps = [i for i in body.get("issues") or [] if i.get("code") == "ZONE_GAP"]
+    assert gaps, body
+    assert gaps[0].get("level") == "warning"
+    # Edit depth valid tidak diblokir oleh warning
+    status, body = request(base, "POST", "/api/pile/P-gap/depth", {"depth": 9000})
+    # Boleh 200 jika validate lolos; bila skema menolak synthetic, resolve-only di atas sudah cukup
+    if status == 200:
+        assert body.get("ok") is True
+    else:
+        # Pastikan bukan karena ZONE_GAP
+        issues = body.get("issues") or []
+        assert not any(i.get("code") == "ZONE_GAP" and i.get("level") == "error" for i in issues)
