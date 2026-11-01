@@ -275,7 +275,68 @@ class Handler(BaseHTTPRequestHandler):
         traceback.print_exc(file=sys.stderr)
         self.send_json({"ok": False, "error": "Galat internal"}, 500)
 
+    def _allowed_hosts(self) -> set[str]:
+        """Host header yang diizinkan: loopback + port server ini."""
+        port = self.server.server_address[1]
+        return {
+            f"127.0.0.1:{port}",
+            f"localhost:{port}",
+            f"[::1]:{port}",
+        }
+
+    def _guard_request(self, *, require_json: bool) -> bool:
+        """Gerbang Host / Origin / Content-Type. False bila respons penolakan sudah dikirim."""
+        host = (self.headers.get("Host") or "").strip()
+        if host not in self._allowed_hosts():
+            self.send_json(
+                {"ok": False, "error": f"Host tidak diizinkan: {host or '(kosong)'}"},
+                400,
+            )
+            return False
+        if require_json:
+            raw_ct = self.headers.get("Content-Type") or ""
+            main_ct = raw_ct.split(";", 1)[0].strip().lower()
+            if main_ct != "application/json":
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": (
+                            "Content-Type harus application/json "
+                            f"(diterima: {raw_ct or '(kosong)'})"
+                        ),
+                    },
+                    415,
+                )
+                return False
+        origin = self.headers.get("Origin")
+        if origin is not None and origin != "":
+            expected = f"http://{host}"
+            if origin != expected:
+                self.send_json(
+                    {"ok": False, "error": f"Origin tidak diizinkan: {origin}"},
+                    403,
+                )
+                return False
+        return True
+
+    def end_headers(self) -> None:
+        """Tambah header keamanan pada setiap respons."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header(
+            "Content-Security-Policy",
+            (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "object-src 'none'; "
+                "base-uri 'none'; "
+                "frame-ancestors 'none'"
+            ),
+        )
+        super().end_headers()
+
     def do_GET(self):
+        if not self._guard_request(require_json=False):
+            return
         with STATE_LOCK:
             try:
                 self._dispatch_get()
@@ -324,6 +385,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404, "Not found")
 
     def do_POST(self):
+        if not self._guard_request(require_json=True):
+            return
         with STATE_LOCK:
             try:
                 self._dispatch_post()

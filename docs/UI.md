@@ -10,8 +10,16 @@ TypeScript di `web/` dilengkapi bridge modular `static/app.js` yang dimuat oleh 
 - `scad-ui --workspace PATH` membatasi operasi buka/simpan berkas ke `PATH`.
 - Data sesi default berada di `output/structural_cad_ui/`, atau di lokasi
   `STRUCTURAL_CAD_DATA` bila variabel lingkungan itu diatur.
-- Server dimaksudkan untuk loopback (`127.0.0.1`). Host non-loopback hanya diberi
-  peringatan di stderr dan tidak mendapat autentikasi tambahan.
+- Server **hanya** menerima loopback: bind host non-loopback ditolak di CLI, dan setiap
+  permintaan HTTP harus membawa header `Host` `127.0.0.1:<port>`, `localhost:<port>`,
+  atau `[::1]:<port>` (selain itu 400).
+- POST wajib `Content-Type: application/json` (selain itu 415). Jika ada header `Origin`,
+  nilainya harus `http://<Host>` (selain itu 403). Tidak ada header CORS.
+- Setiap respons menyertakan `X-Content-Type-Options: nosniff` dan
+  `Content-Security-Policy` (`default-src 'self'`; `script-src` masih `'unsafe-inline'`
+  karena handler `onclick` di shell HTML — **utang teknis**, hapus setelah onclick diganti
+  event listener).
+- Data dokumen yang disisipkan ke `innerHTML` di `static/app.js` melewati `escapeHtml()`.
 
 ## Endpoint aktif
 

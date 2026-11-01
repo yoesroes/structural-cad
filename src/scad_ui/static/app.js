@@ -2,6 +2,20 @@
   let projectDoc = null;
   let resolveData = null;
 
+  /** Escape teks dokumen sebelum disisipkan ke innerHTML (mitigasi XSS). */
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+  // Ekspor untuk uji Node (tidak mengubah perilaku UI)
+  if (typeof globalThis !== 'undefined') {
+    globalThis.__scadEscapeHtml = escapeHtml;
+  }
+
   // --- Menu dropdown ---
   const fileMenu = document.getElementById('menu-file');
   document.querySelectorAll('.menu-item').forEach(item => {
@@ -46,16 +60,20 @@
     const piles = (resolved?.groups || []).find(g => g.id === group.id)?.piles || [];
     const pileMap = Object.fromEntries(piles.map(p => [p.id, p]));
     let html = '<div class="h">Pohon</div>';
-    html += `<div class="tree-root">${doc.project?.name || doc.project?.id || 'Project'}</div>`;
+    const rootName = escapeHtml(doc.project?.name || doc.project?.id || 'Project');
+    html += `<div class="tree-root">${rootName}</div>`;
     const n = (group.instances || []).length;
-    html += `<div class="tree-group active" data-group="${group.id}">${group.id} · ${group.type || 'element'} (${n})</div>`;
+    const gid = escapeHtml(group.id);
+    const gtype = escapeHtml(group.type || 'element');
+    html += `<div class="tree-group active" data-group="${gid}">${gid} · ${gtype} (${n})</div>`;
     (group.instances || []).forEach((inst, idx) => {
       const rp = pileMap[inst.id];
       const ov = rp && rp.overridden && rp.overridden.includes('depth_below_cof');
-      const depth = rp ? rp.depth_below_cof : '';
+      const depth = rp ? escapeHtml(rp.depth_below_cof) : '';
       const mark = ov ? ` <span class="ov">● ${depth}</span>` : '';
       const active = idx === 0 ? ' active' : '';
-      html += `<div class="tree-item${active}" data-pile="${inst.id}">${inst.id}${mark}</div>`;
+      const pid = escapeHtml(inst.id);
+      html += `<div class="tree-item${active}" data-pile="${pid}">${pid}${mark}</div>`;
     });
     sidebar.innerHTML = html;
 
@@ -80,14 +98,14 @@
     if (!tbody) return;
     tbody.innerHTML = piles.map(p => {
       const z3 = (p.zones || []).find(z => z.id === 'Z3');
-      const z3len = z3 ? z3.length : '—';
+      const z3len = z3 ? escapeHtml(z3.length) : '—';
       const depthCell = (p.overridden || []).includes('depth_below_cof')
-        ? `<td class="ov">${p.depth_below_cof} ●</td>`
-        : `<td>${p.depth_below_cof} (grup)</td>`;
+        ? `<td class="ov">${escapeHtml(p.depth_below_cof)} ●</td>`
+        : `<td>${escapeHtml(p.depth_below_cof)} (grup)</td>`;
       return `<tr>
-        <td>${p.id}</td>
-        <td>${p.x ?? ''}</td>
-        <td>${p.y ?? ''}</td>
+        <td>${escapeHtml(p.id)}</td>
+        <td>${escapeHtml(p.x ?? '')}</td>
+        <td>${escapeHtml(p.y ?? '')}</td>
         ${depthCell}
         <td>${z3len}</td>
         <td>Sesuai</td>
@@ -102,18 +120,18 @@
     const mats = data.materials || doc.materials || {};
     const rebars = data.rebars || [];
     const depth = pileResolved ? pileResolved.depth_below_cof : params.depth_below_cof;
-    let html = `<div class="h" style="margin-top:0">Grup ${group.id}</div>`;
-    html += `<div class="r"><span>Diameter</span><span>${params.diameter ?? '—'} mm</span></div>`;
-    html += `<div class="r"><span>Kedalaman</span><span>${depth ?? '—'} mm</span></div>`;
-    html += `<div class="r"><span>Selimut</span><span>${params.cover ?? '—'} mm (${params.cover_ref || ''})</span></div>`;
+    let html = `<div class="h" style="margin-top:0">Grup ${escapeHtml(group.id)}</div>`;
+    html += `<div class="r"><span>Diameter</span><span>${escapeHtml(params.diameter ?? '—')} mm</span></div>`;
+    html += `<div class="r"><span>Kedalaman</span><span>${escapeHtml(depth ?? '—')} mm</span></div>`;
+    html += `<div class="r"><span>Selimut</span><span>${escapeHtml(params.cover ?? '—')} mm (${escapeHtml(params.cover_ref || '')})</span></div>`;
     const beton = mats.concrete?.grade || '—';
     const baja = mats.steel?.grade || '—';
-    html += `<div class="r"><span>Beton / Baja</span><span>${beton} / ${baja}</span></div>`;
+    html += `<div class="r"><span>Beton / Baja</span><span>${escapeHtml(beton)} / ${escapeHtml(baja)}</span></div>`;
     html += `<div class="h">Tulangan</div>`;
     rebars.forEach(r => {
       const shape = r.shape?.code || r.shape || '';
       const zones = (r.extent?.zones || []).join(',');
-      html += `<div class="r"><span>${r.id} ${shape} D${r.diameter}</span><span>${zones}</span></div>`;
+      html += `<div class="r"><span>${escapeHtml(r.id)} ${escapeHtml(shape)} D${escapeHtml(r.diameter)}</span><span>${escapeHtml(zones)}</span></div>`;
     });
     html += `<button class="btn-accent" onclick="openRebarModal()">+ Tambah tulangan</button>`;
     html += `<div class="h">Pemeriksaan</div>`;

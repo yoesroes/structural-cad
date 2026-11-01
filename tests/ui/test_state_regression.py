@@ -362,7 +362,6 @@ def test_zone_gap_warnings_do_not_block_filter():
     assert _resolve_errors_for_pile(issues, {}, "P-other") == []
 
 
-@pytest.mark.xfail(strict=True, reason="S2")
 def test_s2_foreign_headers_are_rejected_without_write(ui_server):
     path = ui_server["data_root"] / "project.json"
     before = path.read_bytes()
@@ -384,7 +383,6 @@ def test_s2_foreign_headers_are_rejected_without_write(ui_server):
     assert path.read_bytes() == before
 
 
-@pytest.mark.xfail(strict=True, reason="S2")
 def test_s2_foreign_origin_rejected_on_save_as(ui_server):
     """S2 juga harus menolak Origin asing pada /api/project/save-as."""
     workspace = ui_server["workspace"]
