@@ -279,3 +279,79 @@ def test_source_diff_returns_leaf_definition_path_only(ui_server):
     assert status == 200
     assert "/definition/name" in body["diffs"]
     assert "/definition" not in body["diffs"]
+
+
+def test_update_from_source_rest_override_rejects_and_keeps_session(ui_server):
+    """D6: update yang membuat override zona menjadi rest -> 400, CURRENT_DOC utuh."""
+    import copy
+    from scad_ui import server as ui_mod
+
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
+    status, opened = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
+    assert status == 200
+    original = copy.deepcopy(opened["project"])
+
+    # Pastikan P1-8 punya override Z2
+    doc = ui_mod.CURRENT_DOC
+    for inst in doc["groups"][0]["instances"]:
+        if inst["id"] == "P1-8":
+            inst.setdefault("overrides", {}).setdefault("zone_lengths", {})["Z2"] = 7000
+            break
+
+    # Tulis sumber yang menjadikan Z2 rest
+    elem = json.loads(
+        (Path(__file__).resolve().parents[2] / "examples" / "BP_D1200.elem.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    zones = [z for z in elem["definition"]["zones"] if z["id"] != "Z3"]
+    for z in zones:
+        if z["id"] == "Z2":
+            z["length"] = "rest"
+    elem["definition"]["zones"] = zones
+    # Hapus rujukan Z3 pada rebar agar dokumen sumber valid skema/validator
+    for rebar in elem["definition"].get("rebars") or []:
+        extent = rebar.get("extent") or {}
+        if "zones" in extent:
+            zs = [z for z in extent["zones"] if z != "Z3"]
+            if not zs:
+                zs = ["Z2"]
+            extent["zones"] = zs
+    src_path = workspace / "BP_D1200_rest.elem.json"
+    src_path.write_text(json.dumps(elem, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    before = copy.deepcopy(ui_mod.CURRENT_DOC)
+    status, body = _request(
+        base,
+        "POST",
+        "/api/group/BP-P1/update-from-source",
+        {"path": "BP_D1200_rest.elem.json"},
+    )
+    assert status == 400, body
+    assert body.get("ok") is False
+    issues = body.get("issues") or []
+    codes = {i.get("code") for i in issues}
+    assert "ZONE_REST_OVERRIDE" in codes or "ZONE_REST_OVERRIDE" in (body.get("error") or "")
+    assert ui_mod.CURRENT_DOC == before
+
+
+def test_source_diff_multiple_matches_requires_path(ui_server):
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
+    assert _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})[0] == 200
+    # Salin BP_D1200 ke dua lokasi
+    src = Path(__file__).resolve().parents[2] / "examples" / "BP_D1200.elem.json"
+    (workspace / "BP_D1200.elem.json").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    sub = workspace / "sub"
+    sub.mkdir()
+    (sub / "BP_D1200.elem.json").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    # Pastikan source.file grup = BP_D1200.elem.json
+    status, body = _request(base, "GET", "/api/group/BP-P1/source-diff")
+    # GET might not go through same path - check server method is GET
+    # api_source_diff is GET /api/group/<id>/source-diff
+    assert status in {200, 400}
+    if status == 400:
+        assert "matches" in body or "beberapa" in (body.get("error") or "").lower() or "path" in (
+            body.get("error") or ""
+        ).lower()

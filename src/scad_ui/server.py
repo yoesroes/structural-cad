@@ -957,7 +957,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": False, "error": str(e)}, 400)
 
     def api_source_diff(self, group_id: str):
-        from scad.files_ops import open_document, source_diff
+        from scad.files_ops import find_source_matches, open_document, source_diff
 
         project = _load_current_project()
         group = next((g for g in project.get("groups") or [] if g.get("id") == group_id), None)
@@ -969,20 +969,46 @@ class Handler(BaseHTTPRequestHandler):
         if not file_name:
             self.send_json({"ok": False, "error": "Grup tidak punya source.file"}, 400)
             return
-        # cari di workspace
-        matches = list(WORKSPACE.rglob(file_name))
+        matches = find_source_matches(WORKSPACE, file_name)
         if not matches:
-            self.send_json({"ok": False, "error": f"Berkas sumber '{file_name}' tidak ada di workspace"}, 404)
+            self.send_json(
+                {"ok": False, "error": f"Berkas sumber '{file_name}' tidak ada di workspace"},
+                404,
+            )
+            return
+        if len(matches) > 1:
+            rels = [str(p.relative_to(WORKSPACE.resolve())) for p in matches]
+            self.send_json(
+                {
+                    "ok": False,
+                    "error": (
+                        f"Beberapa berkas bernama '{file_name}' di workspace; "
+                        "sebut path eksplisit"
+                    ),
+                    "matches": rels,
+                },
+                400,
+            )
             return
         try:
-            elem, _ = open_document(WORKSPACE, str(matches[0].relative_to(WORKSPACE)))
+            rel = str(matches[0].relative_to(WORKSPACE.resolve()))
+            elem, _ = open_document(WORKSPACE, rel)
             diffs = source_diff(group, elem, project_shapes=project.get("shapes") or {})
-            self.send_json({"ok": True, "group_id": group_id, "diffs": diffs, "source_file": file_name})
+            self.send_json(
+                {
+                    "ok": True,
+                    "group_id": group_id,
+                    "diffs": diffs,
+                    "source_file": file_name,
+                    "path": rel,
+                }
+            )
         except ValueError as e:
             self.send_json({"ok": False, "error": str(e)}, 400)
 
+
     def api_update_from_source(self, group_id: str, data):
-        from scad.files_ops import open_document, update_group_from_source
+        from scad.files_ops import find_source_matches, open_document, update_group_from_source
 
         project = _load_current_project()
         group = next((g for g in project.get("groups") or [] if g.get("id") == group_id), None)
@@ -993,24 +1019,63 @@ class Handler(BaseHTTPRequestHandler):
         if not path:
             src = (group.get("definition") or {}).get("source") or {}
             file_name = src.get("file")
-            matches = list(WORKSPACE.rglob(file_name)) if file_name else []
+            matches = find_source_matches(WORKSPACE, file_name) if file_name else []
             if not matches:
                 self.send_json({"ok": False, "error": "path sumber wajib"}, 400)
                 return
-            path = str(matches[0].relative_to(WORKSPACE))
+            if len(matches) > 1:
+                rels = [str(p.relative_to(WORKSPACE.resolve())) for p in matches]
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": (
+                            f"Beberapa berkas bernama '{file_name}' di workspace; "
+                            "sebut path eksplisit"
+                        ),
+                        "matches": rels,
+                    },
+                    400,
+                )
+                return
+            path = str(matches[0].relative_to(WORKSPACE.resolve()))
         try:
             elem, _ = open_document(WORKSPACE, path)
             new_proj, issues = update_group_from_source(project, group_id, elem)
-            if issues:
+            errors = [i for i in issues if i.get("level") == "error"]
+            if errors:
                 self.send_json(
-                    {"ok": False, "error": "Override tidak valid; pembaruan dibatalkan", "issues": issues},
+                    {
+                        "ok": False,
+                        "error": "Pembaruan dibatalkan",
+                        "issues": issues,
+                    },
+                    400,
+                )
+                return
+            # Validasi dokumen hasil sebelum mengubah sesi
+            val_errors = _validation_errors(new_proj)
+            if val_errors:
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": "Validasi gagal; pembaruan dibatalkan",
+                        "issues": val_errors,
+                    },
                     400,
                 )
                 return
             _set_current(new_proj, dirty=True)
-            self.send_json({"ok": True, "project": new_proj, "dirty": True})
+            self.send_json(
+                {
+                    "ok": True,
+                    "project": new_proj,
+                    "dirty": True,
+                    "issues": issues,
+                }
+            )
         except ValueError as e:
             self.send_json({"ok": False, "error": str(e)}, 400)
+
 
 
     def api_pile_recap(self, pile_id: str):

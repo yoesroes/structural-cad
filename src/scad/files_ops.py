@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -148,6 +149,7 @@ def save_document_at(workspace: Path, path: str | Path, doc: dict[str, Any]) -> 
 
 
 def list_workspace_files(workspace: Path, subdir: str = "") -> list[dict[str, str]]:
+    """Daftar berkas JSON di workspace. Symlink keluar workspace dilewati (bukan error)."""
     workspace = workspace.resolve()
     if subdir:
         base = (workspace / subdir).resolve()
@@ -157,7 +159,10 @@ def list_workspace_files(workspace: Path, subdir: str = "") -> list[dict[str, st
         if not base.is_relative_to(workspace):
             raise ValueError("dir di luar workspace")
     except AttributeError:
-        base.relative_to(workspace)
+        try:
+            base.relative_to(workspace)
+        except ValueError as exc:
+            raise ValueError("dir di luar workspace") from exc
     if not base.exists():
         return []
     if base.is_file():
@@ -174,9 +179,34 @@ def list_workspace_files(workspace: Path, subdir: str = "") -> list[dict[str, st
                 continue
         except OSError:
             continue
-        rel = str(p.resolve().relative_to(workspace.resolve()))
+        try:
+            resolved = p.resolve()
+            rel = str(resolved.relative_to(workspace))
+        except (OSError, ValueError):
+            # Symlink atau path yang resolve() di luar workspace — lewati
+            continue
         out.append({"path": rel, "name": p.name})
     return out
+
+
+def find_source_matches(workspace: Path, file_name: str) -> list[Path]:
+    """Cari berkas sumber di workspace; hasil diurutkan path relatif."""
+    if not file_name:
+        return []
+    workspace = workspace.resolve()
+    matches: list[Path] = []
+    for p in workspace.rglob(file_name):
+        if not p.is_file():
+            continue
+        try:
+            resolved = p.resolve()
+            if not resolved.is_relative_to(workspace):
+                continue
+            matches.append(resolved)
+        except (OSError, ValueError, AttributeError):
+            continue
+    matches.sort(key=lambda p: str(p.relative_to(workspace)))
+    return matches
 
 
 def add_element_to_project(
@@ -191,8 +221,8 @@ def add_element_to_project(
     layout: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Salin definisi elemen ke grup baru + instances grid. Mengembalikan project baru."""
-    if count < 1:
-        raise ValueError("count harus >= 1")
+    if not (1 <= count <= 1000):
+        raise ValueError("count harus antara 1 dan 1000")
     if element_doc is None:
         raise ValueError("elemen wajib")
     if element_doc.get("kind") != "element":
@@ -230,9 +260,19 @@ def add_element_to_project(
     pattern = naming.get("pattern") or "P{n}"
     start = int(naming.get("start") or 1)
     layout = layout or {}
-    cols = int(layout.get("cols") or count)
-    dx = float(layout.get("dx") or 0)
-    dy = float(layout.get("dy") or 0)
+    try:
+        cols = int(layout.get("cols") if layout.get("cols") is not None else count)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("cols harus bilangan bulat >= 1") from exc
+    if cols < 1:
+        raise ValueError("cols harus >= 1")
+    try:
+        dx = float(layout.get("dx") or 0)
+        dy = float(layout.get("dy") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("dx dan dy harus angka") from exc
+    if not (math.isfinite(dx) and math.isfinite(dy)):
+        raise ValueError("dx dan dy harus finite")
 
     instances = []
     for i in range(count):
@@ -317,38 +357,120 @@ def update_group_from_source(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Ganti definition.data dari sumber; pertahankan instances/overrides.
 
-    Override zona yang tidak ada di definisi baru -> issues dan batalkan.
+    - Tipe definisi harus sama dengan group.type (TYPE_MISMATCH).
+    - Override zona yang tidak ada di definisi baru -> issues dan batalkan.
+    - Override pada zona yang kini 'rest' -> ZONE_REST_OVERRIDE, batalkan (D6).
+    - defaults.depth_below_cof: ikut definisi baru bila belum diubah pengguna;
+      jika diubah, pertahankan + Issue info DEFAULT_KEPT.
     """
     new_proj = copy.deepcopy(project)
     target = None
-    for g in new_proj.get("groups") or []:
+    gi = None
+    for idx, g in enumerate(new_proj.get("groups") or []):
         if g.get("id") == group_id:
             target = g
+            gi = idx
             break
     if target is None:
         raise ValueError(f"Grup '{group_id}' tidak ditemukan")
 
     old_def = (target.get("definition") or {}).get("data") or {}
-    new_def = copy.deepcopy(source_elem["definition"])
-    zone_ids = {z.get("id") for z in (new_def.get("zones") or [])}
-
+    new_def = copy.deepcopy(source_elem.get("definition") or {})
+    new_type = new_def.get("type")
+    group_type = target.get("type")
     issues: list[dict[str, Any]] = []
-    for inst in target.get("instances") or []:
+
+    if new_type is not None and group_type is not None and new_type != group_type:
+        issues.append(
+            {
+                "level": "error",
+                "code": "TYPE_MISMATCH",
+                "path": f"/groups/{gi}/type",
+                "message": (
+                    f"Tipe sumber '{new_type}' berbeda dari tipe grup '{group_type}'"
+                ),
+            }
+        )
+        return project, issues
+
+    zone_ids = {z.get("id") for z in (new_def.get("zones") or []) if isinstance(z, dict)}
+    rest_zone_ids = {
+        z.get("id")
+        for z in (new_def.get("zones") or [])
+        if isinstance(z, dict) and z.get("length") == "rest" and z.get("id") is not None
+    }
+
+    for ii, inst in enumerate(target.get("instances") or []):
+        if not isinstance(inst, dict):
+            continue
+        pile_id = str(inst.get("id") or f"index-{ii}")
         ovr = inst.get("overrides") or {}
+        if not isinstance(ovr, dict):
+            continue
         zl = ovr.get("zone_lengths") or {}
+        if not isinstance(zl, dict):
+            continue
         for zid in zl:
             if zid not in zone_ids:
                 issues.append(
                     {
                         "level": "error",
                         "code": "OVERRIDE_ZONE_MISSING",
-                        "path": f"/groups/{group_id}/instances/{inst.get('id')}/overrides/zone_lengths/{zid}",
-                        "message": f"Override zona '{zid}' tidak ada di definisi sumber baru",
+                        "path": (
+                            f"/groups/{gi}/instances/{ii}/overrides/zone_lengths/{zid}"
+                        ),
+                        "message": (
+                            f"Override zona '{zid}' tidak ada di definisi sumber baru"
+                        ),
+                    }
+                )
+            elif zid in rest_zone_ids:
+                issues.append(
+                    {
+                        "level": "error",
+                        "code": "ZONE_REST_OVERRIDE",
+                        "path": (
+                            f"/groups/{gi}/instances/{ii}/overrides/zone_lengths/{zid}"
+                        ),
+                        "message": (
+                            f"Override zona rest '{zid}' pada pile '{pile_id}' "
+                            "tidak diizinkan setelah update-from-source"
+                        ),
                     }
                 )
 
-    if issues:
+    if any(i.get("level") == "error" for i in issues):
         return project, issues  # batalkan — kembalikan aslinya
+
+    # defaults.depth_below_cof
+    old_params = old_def.get("params") or {}
+    new_params = new_def.get("params") or {}
+    old_depth = old_params.get("depth_below_cof")
+    new_depth = new_params.get("depth_below_cof")
+    defaults = target.setdefault("defaults", {})
+    if not isinstance(defaults, dict):
+        defaults = {}
+        target["defaults"] = defaults
+    dparams = defaults.setdefault("params", {})
+    if not isinstance(dparams, dict):
+        dparams = {}
+        defaults["params"] = dparams
+    current_default = dparams.get("depth_below_cof")
+    if new_depth is not None:
+        if current_default is None or current_default == old_depth:
+            dparams["depth_below_cof"] = new_depth
+        elif current_default != new_depth:
+            issues.append(
+                {
+                    "level": "info",
+                    "code": "DEFAULT_KEPT",
+                    "path": f"/groups/{gi}/defaults/params/depth_below_cof",
+                    "message": (
+                        f"defaults.depth_below_cof={current_default} dipertahankan "
+                        f"(definisi baru={new_depth})"
+                    ),
+                }
+            )
 
     old_source = (target.get("definition") or {}).get("source") or {}
     file_label = old_source.get("file") or "source.elem.json"
@@ -373,4 +495,4 @@ def update_group_from_source(
     # Shape lokal yang bukan milik sumber tetap dipertahankan.
     for k, v in new_shapes.items():
         shapes[k] = copy.deepcopy(v)
-    return new_proj, []
+    return new_proj, issues
