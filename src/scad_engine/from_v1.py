@@ -730,6 +730,12 @@ def recap_pile(doc: dict, pile_id: str) -> dict[str, Any]:
 
 
 def recap_group(doc: dict, group_id: str) -> dict[str, Any]:
+    """Rekap gabungan satu grup.
+
+    Agregasi totals dikunci pada (mark, cut_length_mm dibulatkan 3 desimal) sehingga
+    mark dengan beberapa panjang potong (mis. B4 pada P1, P6 pada pile_cap) muncul
+    sebagai baris terpisah. Urutan stabil: urutan kemunculan mark, lalu panjang menurun.
+    """
     g = None
     for gg in doc.get("groups") or []:
         if gg.get("id") == group_id:
@@ -738,7 +744,8 @@ def recap_group(doc: dict, group_id: str) -> dict[str, Any]:
     if g is None:
         raise ValueError(f"Grup '{group_id}' tidak ditemukan")
     per_pile = []
-    totals: dict[str, dict[str, Any]] = {}
+    totals: dict[tuple[str, float], dict[str, Any]] = {}
+    mark_order: list[str] = []
     all_issues: list = []
     for inst in g.get("instances") or []:
         pid = inst["id"]
@@ -746,29 +753,54 @@ def recap_group(doc: dict, group_id: str) -> dict[str, Any]:
         per_pile.append(r)
         all_issues.extend(r["issues"])
         for row in r["rows"]:
-            key = row["id"]
+            mark = str(row.get("mark") or row["id"])
+            cut = round(float(row["cut_length_mm"]), 3)
+            key = (mark, cut)
             if key not in totals:
+                if mark not in mark_order:
+                    mark_order.append(mark)
                 totals[key] = {
-                    "id": key,
+                    "id": mark,
+                    "mark": mark,
                     "diameter": row["diameter"],
                     "count": 0,
-                    "length_mm": row["length_mm"],
-                    "cut_length_mm": row["cut_length_mm"],
-                    "geometry_length_mm": row["geometry_length_mm"],
+                    "length_mm": cut,
+                    "cut_length_mm": cut,
+                    "geometry_length_mm": round(float(row["geometry_length_mm"]), 3),
                     "total_length_mm": 0.0,
                     "total_length_m": 0.0,
                     "weight_kg": 0.0,
                 }
-            totals[key]["count"] += row["count"]
-            totals[key]["total_length_mm"] += row["total_length_mm"]
-            totals[key]["total_length_m"] += row["total_length_m"]
-            totals[key]["weight_kg"] += row["weight_kg"]
+            totals[key]["count"] += int(row["count"])
+            totals[key]["total_length_mm"] += float(row["total_length_mm"])
+            totals[key]["total_length_m"] += float(row["total_length_m"])
+            totals[key]["weight_kg"] += float(row["weight_kg"])
+
+    ordered: list[dict[str, Any]] = []
+    for mark in mark_order:
+        rows_for_mark = [row for (m, _cut), row in totals.items() if m == mark]
+        rows_for_mark.sort(key=lambda r: float(r["cut_length_mm"]), reverse=True)
+        ordered.extend(rows_for_mark)
+
+    finalized: list[dict[str, Any]] = []
+    for row in ordered:
+        count = int(row["count"])
+        cut = float(row["cut_length_mm"])
+        # Hitung ulang total dari count * cut agar invarian selalu tepat;
+        # berat tetap hasil jumlah dari pile (paritas berat total).
+        total_mm = count * cut
+        finalized.append(
+            {
+                **row,
+                "total_length_mm": round(total_mm, 3),
+                "total_length_m": round(total_mm / 1000.0, 3),
+                "weight_kg": round(float(row["weight_kg"]), 3),
+            }
+        )
+
     return {
         "group_id": group_id,
         "piles": per_pile,
-        "totals": [
-            {**row, "total_length_m": round(row["total_length_m"], 3), "weight_kg": round(row["weight_kg"], 3)}
-            for row in totals.values()
-        ],
+        "totals": finalized,
         "issues": all_issues,
     }
