@@ -236,6 +236,14 @@ def _pilecap_assert_inside_concrete(
                     )
 
 
+def _first_not_none(*values):
+    """Nilai pertama yang bukan None (0 dan False tetap dianggap nilai sah)."""
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
 def _cover_axis_offset(cover_ref: str, diameter: float) -> float:
     """Geser sumbu dari muka beton: surface → d/2, centerline → 0."""
     if cover_ref == "surface":
@@ -243,7 +251,7 @@ def _cover_axis_offset(cover_ref: str, diameter: float) -> float:
     return 0.0
 
 
-def _pilecap_groups_v1(definition: dict) -> list[BarGroup]:
+def _pilecap_groups_v1(definition: dict, settings: dict | None = None) -> list[BarGroup]:
     """Bangun pile cap dari params + RebarItem v1 (tanpa helper privat layout)."""
     p = definition.get("params") or {}
     items = {rid: _pilecap_item(definition, rid) for rid in ("P1", "P2", "P3", "P4", "P5", "P6")}
@@ -251,11 +259,20 @@ def _pilecap_groups_v1(definition: dict) -> list[BarGroup]:
     d = {rid: float(items[rid]["diameter"]) for rid in items}
     top, bottom = float(p["cover_top"]), float(p["cover_bottom"])
     sx, sy = float(p["cover_side_x"]), float(p["cover_side_y"])
-    cover_ref = str(p.get("cover_ref") or "centerline")
+    # Urutan: params.cover_ref -> settings.cover_ref -> 'surface' (sama dengan plugin/project).
+    cover_ref = str(_first_not_none(p.get("cover_ref"), (settings or {}).get("cover_ref"), "surface"))
+    if cover_ref not in ("surface", "centerline"):
+        raise ValueError(f"pile_cap: cover_ref tidak dikenal: {cover_ref!r}")
 
-    # Alias param: kanonik cad_h3 + nama dari H3 zip
-    ratio = float(p.get("lap_ratio_D") or p.get("lap_ratio") or 40)
-    mid = float(p.get("lap_mid_height") or p.get("lap_reference_z") or H / 2)
+    # Alias param: kanonik cad_h3 + nama dari H3 zip. Nilai 0 TIDAK dianggap 'tidak ada'.
+    ratio = float(_first_not_none(p.get("lap_ratio_D"), p.get("lap_ratio"), 40))
+    if ratio <= 0:
+        raise ValueError("pile_cap: lap_ratio_D harus > 0")
+    mid = float(_first_not_none(p.get("lap_mid_height"), p.get("lap_reference_z"), H / 2))
+    # Radius dalam tekuk U-bar dalam kelipatan diameter (default 2d = 38 mm untuk D19).
+    bend_in_db = float(_first_not_none(p.get("bend_inside_radius_db"), 2.0))
+    if bend_in_db <= 0:
+        raise ValueError("pile_cap: bend_inside_radius_db harus > 0")
     nest = p.get("lap_nesting") or p.get("leg_layout") or "inside_edge_bars"
 
     lap12 = ratio * max(d["P1"], d["P2"])
@@ -328,7 +345,7 @@ def _pilecap_groups_v1(definition: dict) -> list[BarGroup]:
                 (a1, 0.0, z_run),
             )
             origins = [(0.0, y, 0.0) for y in positions]
-        bend = 38.0 + d[rid] / 2.0  # setara D19 layout bawaan
+        bend = (bend_in_db + 0.5) * d[rid]  # radius sumbu = radius dalam + d/2
         proto = BarProto(rid, rid, d[rid], pts, bend)
         return BarGroup(
             rid,
@@ -391,13 +408,15 @@ def _pilecap_groups_v1(definition: dict) -> list[BarGroup]:
             ),
             r5,
         )
+    # Paritas dari INDEKS grid (bukan round(x/spasi)) agar kait tetap berselang-seling
+    # untuk inset berapa pun.
     inst5 = [
         Instance(
-            "P5.+" if (round(x / p5_spacing) + round(y / p5_spacing_y)) % 2 == 0 else "P5.-",
+            "P5.+" if (ix + iy) % 2 == 0 else "P5.-",
             (x, y, 0.0),
         )
-        for x in xs
-        for y in ys
+        for ix, x in enumerate(xs)
+        for iy, y in enumerate(ys)
     ]
     groups.append(
         BarGroup(
@@ -473,7 +492,7 @@ def _bar_groups_pile_cap(
 ) -> list[BarGroup]:
     """Entry pile_cap: template P1–P6; tegakkan kontrak H3 sebelum kuantitas."""
     _pilecap_assert_contract(group, inst, definition)
-    groups = _pilecap_groups_v1(definition)
+    groups = _pilecap_groups_v1(definition, doc.get("settings"))
     p = definition.get("params") or {}
     try:
         L, W, H = float(p["length"]), float(p["width"]), float(p["height"])
@@ -501,6 +520,10 @@ def build_bar_groups(doc: dict, pile_id: str) -> list[BarGroup]:
     return _placed_to_groups(by_rebar)
 
 
+_XY_COINCIDENT_TOL = 0.5  # mm
+_BUNDLE_TOL = 0.5  # mm
+
+
 def _min_clear_spacing(groups: list[BarGroup]) -> float | None:
     """Jarak bersih minimum antar *lokasi* (abaikan pasangan dalam bundel: dist ≈ d)."""
     pts = []
@@ -519,8 +542,12 @@ def _min_clear_spacing(groups: list[BarGroup]) -> float | None:
             dy = pts[i][1] - pts[j][1]
             dist = math.hypot(dx, dy)
             d = pts[i][2]
-            # bundel tangensial: jarak pusat ≈ d → lewati
-            if dist < 1.5 * d:
+            # Batang bertumpuk pada z (cincin/spiral: origin xy sama) bukan pelanggaran spasi.
+            if dist < _XY_COINCIDENT_TOL:
+                continue
+            # Bundel tangensial menempel: jarak pusat = d (toleransi kecil) → lewati.
+            # Pasangan lain yang terlalu dekat (mis. 1,2d) kini ikut dihitung.
+            if abs(dist - d) <= _BUNDLE_TOL:
                 continue
             clear = dist - d  # chord antar sumbu - d (satu diameter penuh antar permukaan)
             # konsisten dengan acuan 46.4 = chord - 2*(d/2) untuk d sama = chord - d

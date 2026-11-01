@@ -26,6 +26,7 @@ class PileCapPlugin(ElementPlugin):
                 "lap_nesting": {"enum": ["inside_edge_bars", "bottom_inside", "top_inside"]},
                 "lap_ratio_D": {"type": "number", "exclusiveMinimum": 0},
                 "lap_mid_height": {"type": "number", "minimum": 0},
+                "bend_inside_radius_db": {"type": "number", "exclusiveMinimum": 0},
             },
             "patternProperties": {"^x_": {}},
             "additionalProperties": False,
