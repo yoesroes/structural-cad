@@ -12,6 +12,7 @@ from collections import OrderedDict
 import sys
 import threading
 import traceback
+import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -59,6 +60,33 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024
 STATE_LOCK = threading.RLock()
 _KEEP_PATH = object()
+
+# A4: keluaran /run-2d memakai nama unik per request; hanya RUN_2D_KEEP berkas terbaru disimpan.
+RUN_2D_KEEP = 20
+_RUN_2D_LOCK = threading.Lock()
+
+
+def _new_run_2d_target() -> Path:
+    """Path SVG unik per request agar /run-2d bersamaan (di luar STATE_LOCK) tidak saling menimpa."""
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    return DATA_ROOT / f"run-2d-{uuid.uuid4().hex[:12]}.svg"
+
+
+def _prune_run_2d(keep: int = RUN_2D_KEEP) -> None:
+    """Hapus SVG run-2d lama; sisakan `keep` berkas terbaru. Galat I/O diabaikan (best effort)."""
+    with _RUN_2D_LOCK:
+        entries = []
+        for path in DATA_ROOT.glob("run-2d-*.svg"):
+            try:
+                entries.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+        entries.sort(key=lambda item: item[0], reverse=True)
+        for _mtime, path in entries[keep:]:
+            try:
+                path.unlink()
+            except OSError:
+                pass
 
 # Cache LRU hasil recap_pile: kunci (sha256 dokumen, pile_id)
 _RECAP_PILE_CACHE: OrderedDict[tuple[str, str], dict] = OrderedDict()
@@ -639,9 +667,9 @@ class Handler(BaseHTTPRequestHandler):
             prims, layers = compose(
                 length, width, height, trans, longitudinal, build_recap(groups)
             )
-            target = DATA_ROOT / "run-2d.svg"
-            target.parent.mkdir(parents=True, exist_ok=True)
+            target = _new_run_2d_target()
             write_svg(prims, layers, target)
+            _prune_run_2d()
             self.send_json({"ok": True, "pile_id": pile_id, "path": str(target), "format": "svg"})
         except (KeyError, TypeError, ValueError) as exc:
             self.send_json({"ok": False, "error": str(exc)}, 400)
