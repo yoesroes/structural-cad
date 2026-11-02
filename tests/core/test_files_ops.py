@@ -322,3 +322,21 @@ def test_update_from_source_rejects_rest_override_d6():
     assert any(i.get("code") == "ZONE_REST_OVERRIDE" for i in issues)
     # project tidak berubah
     assert proj["groups"][0]["definition"]["data"]["zones"][-1]["id"] == "Z3"
+
+
+def test_find_source_matches_exact_name_not_glob(tmp_path: Path):
+    """Nama dengan karakter glob diperlakukan literal, bukan pola rglob."""
+    from scad.files_ops import find_source_matches
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    # Berkas literal bernama star.elem.json
+    (workspace / "star.elem.json").write_text("{}", encoding="utf-8")
+    (workspace / "a.elem.json").write_text("{}", encoding="utf-8")
+    (workspace / "b.elem.json").write_text("{}", encoding="utf-8")
+    # Pola glob * tidak boleh mencocokkan semua
+    matches = find_source_matches(workspace, "*.elem.json")
+    assert matches == []
+    matches2 = find_source_matches(workspace, "star.elem.json")
+    assert len(matches2) == 1
+    assert matches2[0].name == "star.elem.json"

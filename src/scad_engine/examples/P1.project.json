@@ -52,7 +52,7 @@
     },
     "R87": {
       "code": "R87",
-      "version": 1,
+      "version": 2,
       "name": "Spiral",
       "standard": "BS8666:87",
       "params": [
@@ -76,8 +76,8 @@
         "pitch": "=B",
         "height": "=C"
       },
-      "cut_length": "=C/B*pi*(A-d)",
-      "notes": "Simbol pada bagan terbaca 'n'; diasumsikan pi. Verifikasi ke standar."
+      "cut_length": "=C/B*sqrt((pi*(A-d))*(pi*(A-d))+B*B)",
+      "notes": "R87 v2: B boleh skalar atau {by_zone:{Zid:pitch}}. Panjang potong = jumlah per zona L/pitch*sqrt((pi*(A-d))^2+pitch^2)."
     },
     "RING": {
       "code": "RING",
@@ -111,7 +111,7 @@
       "definition": {
         "source": {
           "file": "BP_D1200.elem.json",
-          "hash": "sha256:f13005c8beb2766f5b1c1fc48a0256300c93d5903a872b75b795c0d3ca06fccd",
+          "hash": "sha256:4c03bb2a8ccd0debe518496c2f1c3669c3b2422f75ea7be05f12df015559c673",
           "added_at": "2026-10-23T09:00:00Z"
         },
         "data": {
@@ -138,7 +138,7 @@
             {
               "id": "Z0",
               "side": "above_cof",
-              "length": 1300
+              "length": 1280
             },
             {
               "id": "Z1",
@@ -191,11 +191,19 @@
               "orientation": "vertical",
               "shape_params": {
                 "A": "=diameter-2*cover",
-                "B": 75
+                "B": {
+                  "by_zone": {
+                    "Z1": 75,
+                    "Z2": 200,
+                    "Z3": 300
+                  }
+                }
               },
               "extent": {
                 "zones": [
-                  "Z1"
+                  "Z1",
+                  "Z2",
+                  "Z3"
                 ]
               },
               "position": {
@@ -206,35 +214,6 @@
               },
               "arrangement": {
                 "mode": "single"
-              }
-            },
-            {
-              "id": "B3",
-              "shape": {
-                "code": "RING"
-              },
-              "diameter": 16,
-              "orientation": "horizontal",
-              "shape_params": {
-                "A": "=diameter-2*cover"
-              },
-              "extent": {
-                "zones": [
-                  "Z2"
-                ]
-              },
-              "position": {
-                "ref": "concrete",
-                "face": "outer",
-                "offset_type": "clear",
-                "offset": "=cover"
-              },
-              "arrangement": {
-                "mode": "group",
-                "pattern": "linear",
-                "axis": "z",
-                "by": "spacing",
-                "spacing": 200
               }
             },
             {
@@ -254,7 +233,7 @@
                 "ref": "concrete",
                 "face": "outer",
                 "offset_type": "clear",
-                "offset": "=cover+16"
+                "offset": "=cover+d_of('B2')+32"
               },
               "arrangement": {
                 "mode": "group",
@@ -262,6 +241,40 @@
                 "by": "count",
                 "count": 28,
                 "bundle": 1
+              }
+            },
+            {
+              "id": "B5",
+              "shape": {
+                "code": "RING"
+              },
+              "diameter": 16,
+              "orientation": "horizontal",
+              "shape_params": {
+                "A": "=diameter-2*cover",
+                "lap": "=40*d"
+              },
+              "extent": {
+                "zones": [
+                  "Z0"
+                ]
+              },
+              "position": {
+                "ref": "concrete",
+                "face": "outer",
+                "offset_type": "clear",
+                "offset": "=cover"
+              },
+              "arrangement": {
+                "mode": "group",
+                "pattern": "linear",
+                "axis": "z",
+                "by": "spacing",
+                "spacing": "=shape_param('B2','B','Z1')",
+                "range": {
+                  "from": "=shape_param('B2','B','Z1')",
+                  "to": "=zone_length('Z0')"
+                }
               }
             }
           ]

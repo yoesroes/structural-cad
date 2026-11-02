@@ -190,13 +190,23 @@ def list_workspace_files(workspace: Path, subdir: str = "") -> list[dict[str, st
 
 
 def find_source_matches(workspace: Path, file_name: str) -> list[Path]:
-    """Cari berkas sumber di workspace; hasil diurutkan path relatif."""
+    """Cari berkas sumber di workspace; hasil diurutkan path relatif.
+
+    Pencocokan nama berkas **persis** (bukan pola glob): karakter `*`, `?`, `[`
+    di `file_name` diperlakukan literal.
+    """
     if not file_name:
+        return []
+    # Hanya basename agar path relatif di source.file tidak dipakai sebagai pola rglob
+    name = Path(file_name).name
+    if not name or name in {".", ".."}:
         return []
     workspace = workspace.resolve()
     matches: list[Path] = []
-    for p in workspace.rglob(file_name):
+    for p in workspace.rglob("*"):
         if not p.is_file():
+            continue
+        if p.name != name:
             continue
         try:
             resolved = p.resolve()

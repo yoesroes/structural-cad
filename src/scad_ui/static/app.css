@@ -387,3 +387,16 @@
     font-weight: 600;
   }
   .btn-primary:hover { background: #1a52b8; }
+
+/* P7b: ganti atribut style inline */
+.h-first { margin-top: 0; }
+.text-muted-inline { color: var(--muted); }
+.shape-preview-svg { width: 100%; margin-top: 10px; }
+
+/* P8: item menu / tombol belum tersedia */
+.mi.disabled,
+button[disabled].btn-accent {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: not-allowed;
+}

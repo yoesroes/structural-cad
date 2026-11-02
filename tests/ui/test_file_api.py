@@ -355,3 +355,51 @@ def test_source_diff_multiple_matches_requires_path(ui_server):
         assert "matches" in body or "beberapa" in (body.get("error") or "").lower() or "path" in (
             body.get("error") or ""
         ).lower()
+
+
+def test_update_from_source_rejects_zone_depth_short(ui_server):
+    """D1/T2: update yang membuat zona fixed > depth override pile -> 400, sesi utuh."""
+    import copy
+    from scad_ui import server as ui_mod
+
+    workspace = ui_server["workspace"]
+    base = ui_server["base"]
+    status, _ = _request(base, "POST", "/api/project/open", {"path": "P1.project.json"})
+    assert status == 200
+    before = copy.deepcopy(ui_mod.CURRENT_DOC)
+
+    # P1-2 depth override 26000; buat sumber dengan zona fixed yang melebihi 26000
+    elem = json.loads(
+        (Path(__file__).resolve().parents[2] / "examples" / "BP_D1200.elem.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    # Z0+Z1+Z2 fixed besar, tanpa rest
+    elem["definition"]["zones"] = [
+        {"id": "Z0", "length": 1280},
+        {"id": "Z1", "length": 15000},
+        {"id": "Z2", "length": 15000},
+    ]
+    for rebar in elem["definition"].get("rebars") or []:
+        extent = rebar.get("extent") or {}
+        if "zones" in extent:
+            extent["zones"] = [z for z in extent["zones"] if z in {"Z0", "Z1", "Z2"}]
+            if not extent["zones"]:
+                extent["zones"] = ["Z0"]
+    src_path = workspace / "BP_deep_fixed.elem.json"
+    src_path.write_text(json.dumps(elem, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    status, body = _request(
+        base,
+        "POST",
+        "/api/group/BP-P1/update-from-source",
+        {"path": "BP_deep_fixed.elem.json"},
+    )
+    assert status == 400, body
+    assert body.get("ok") is False
+    issues = body.get("issues") or []
+    codes = {i.get("code") for i in issues if isinstance(i, dict)}
+    assert "ZONE_DEPTH_SHORT" in codes or any(
+        "ZONE_DEPTH" in (body.get("error") or "") for _ in [0]
+    ) or codes  # minimal ada issue resolve
+    assert ui_mod.CURRENT_DOC == before

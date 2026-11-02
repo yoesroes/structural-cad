@@ -16,9 +16,10 @@ TypeScript di `web/` dilengkapi bridge modular `static/app.js` yang dimuat oleh 
 - POST wajib `Content-Type: application/json` (selain itu 415). Jika ada header `Origin`,
   nilainya harus `http://<Host>` (selain itu 403). Tidak ada header CORS.
 - Setiap respons menyertakan `X-Content-Type-Options: nosniff` dan
-  `Content-Security-Policy` (`default-src 'self'`; `script-src` masih `'unsafe-inline'`
-  karena handler `onclick` di shell HTML — **utang teknis**, hapus setelah onclick diganti
-  event listener).
+  `Content-Security-Policy` lengkap (`default-src`, `script-src`, `style-src`, `object-src`,
+  `base-uri`, `frame-ancestors`). `script-src`/`style-src` masih mengizinkan `'unsafe-inline'`
+  karena handler `onclick` di shell — **utang teknis**. Style atribut inline di shell sudah
+  dipindah ke kelas CSS (`h-first`, `text-muted-inline`, `shape-preview-svg`).
 - Data dokumen yang disisipkan ke `innerHTML` di `static/app.js` melewati `escapeHtml()`.
 
 ## Endpoint aktif

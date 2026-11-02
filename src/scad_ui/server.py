@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+from collections import OrderedDict
 import sys
 import threading
 import traceback
@@ -58,6 +59,59 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024
 STATE_LOCK = threading.RLock()
 _KEEP_PATH = object()
+
+# Cache LRU hasil recap_pile: kunci (sha256 dokumen, pile_id)
+_RECAP_PILE_CACHE: OrderedDict[tuple[str, str], dict] = OrderedDict()
+_RECAP_CACHE_MAX = 32
+_RECAP_CACHE_HITS = 0
+_RECAP_CACHE_MISSES = 0
+_RECAP_CACHE_LOCK = threading.Lock()
+
+
+def _snapshot_current_doc() -> dict:
+    """Salinan dokumen sesi; pemanggil harus memegang STATE_LOCK atau memanggil di luar jalur hot."""
+    return copy.deepcopy(_load_current_project())
+
+
+def _cached_recap_pile(doc: dict, pile_id: str) -> dict:
+    """Recap pile dengan cache LRU (maks 32), aman untuk thread."""
+    global _RECAP_CACHE_HITS, _RECAP_CACHE_MISSES
+    from scad.io.canonical import sha256_of
+    from scad_engine.from_v1 import recap_pile
+
+    key = (sha256_of(doc), str(pile_id))
+    with _RECAP_CACHE_LOCK:
+        if key in _RECAP_PILE_CACHE:
+            _RECAP_CACHE_HITS += 1
+            _RECAP_PILE_CACHE.move_to_end(key)
+            return copy.deepcopy(_RECAP_PILE_CACHE[key])
+        _RECAP_CACHE_MISSES += 1
+    result = recap_pile(doc, pile_id)
+    with _RECAP_CACHE_LOCK:
+        _RECAP_PILE_CACHE[key] = result
+        _RECAP_PILE_CACHE.move_to_end(key)
+        while len(_RECAP_PILE_CACHE) > _RECAP_CACHE_MAX:
+            _RECAP_PILE_CACHE.popitem(last=False)
+    return copy.deepcopy(result)
+
+
+def recap_cache_stats() -> dict[str, int]:
+    """Statistik cache untuk tes (hits/misses/ukuran)."""
+    with _RECAP_CACHE_LOCK:
+        return {
+            "hits": _RECAP_CACHE_HITS,
+            "misses": _RECAP_CACHE_MISSES,
+            "size": len(_RECAP_PILE_CACHE),
+        }
+
+
+def reset_recap_cache() -> None:
+    """Kosongkan cache (untuk tes)."""
+    global _RECAP_CACHE_HITS, _RECAP_CACHE_MISSES
+    with _RECAP_CACHE_LOCK:
+        _RECAP_PILE_CACHE.clear()
+        _RECAP_CACHE_HITS = 0
+        _RECAP_CACHE_MISSES = 0
 
 
 def _safe_join(base: Path, rel: str) -> Path | None:
@@ -327,6 +381,7 @@ class Handler(BaseHTTPRequestHandler):
             (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
                 "object-src 'none'; "
                 "base-uri 'none'; "
                 "frame-ancestors 'none'"
@@ -336,6 +391,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if not self._guard_request(require_json=False):
+            return
+        path = urlsplit(self.path).path
+        # Perhitungan berat di luar STATE_LOCK (snapshot di dalam kunci)
+        if (path.startswith("/api/pile/") and path.endswith("/recap")) or (
+            path.startswith("/api/group/") and path.endswith("/recap")
+        ):
+            try:
+                with STATE_LOCK:
+                    project = _snapshot_current_doc()
+                parts = [p for p in path.split("/") if p]
+                if path.startswith("/api/pile/") and len(parts) >= 4:
+                    self.api_pile_recap(parts[2], project=project)
+                elif path.startswith("/api/group/") and len(parts) >= 4:
+                    self.api_group_recap(parts[2], project=project)
+                else:
+                    self.send_error(404, "Not found")
+            except Exception as exc:
+                self._handle_request_exception(exc)
             return
         with STATE_LOCK:
             try:
@@ -386,6 +459,31 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if not self._guard_request(require_json=True):
+            return
+        path = urlsplit(self.path).path
+        if path in ("/run-2d", "/run-3d"):
+            try:
+                # Baca body di luar kunci dokumen (hanya rfile)
+                raw_length = self.headers.get("Content-Length", "0")
+                try:
+                    length = int(raw_length)
+                except (TypeError, ValueError):
+                    self.send_json({"ok": False, "error": "Content-Length tidak valid"}, 400)
+                    return
+                if length < 0 or length > MAX_REQUEST_BODY_BYTES:
+                    self.send_json({"ok": False, "error": "Request tidak valid"}, 400)
+                    return
+                body = self.rfile.read(length).decode("utf-8")
+                data = json.loads(body) if body else {}
+                with STATE_LOCK:
+                    if not isinstance(data.get("doc"), dict):
+                        data = {**data, "doc": _snapshot_current_doc()}
+                if path == "/run-2d":
+                    self.run_2d(data)
+                else:
+                    self.run_3d(data)
+            except Exception as exc:
+                self._handle_request_exception(exc)
             return
         with STATE_LOCK:
             try:
@@ -1127,6 +1225,40 @@ class Handler(BaseHTTPRequestHandler):
                     400,
                 )
                 return
+            # D1/T2: tolak bila resolve menghasilkan error (mis. ZONE_DEPTH_SHORT)
+            from scad.resolve import resolve_project
+
+            resolved = resolve_project(new_proj)
+            resolve_errors = [
+                i
+                for i in (resolved.get("issues") or [])
+                if (i.get("level") if isinstance(i, dict) else getattr(i, "level", None))
+                == "error"
+            ]
+            # Normalisasi ke dict
+            norm_errors = []
+            for i in resolve_errors:
+                if isinstance(i, dict):
+                    norm_errors.append(i)
+                else:
+                    norm_errors.append(
+                        {
+                            "level": getattr(i, "level", "error"),
+                            "code": getattr(i, "code", ""),
+                            "path": getattr(i, "path", ""),
+                            "message": getattr(i, "message", str(i)),
+                        }
+                    )
+            if norm_errors:
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": "Resolve gagal; pembaruan dibatalkan",
+                        "issues": norm_errors,
+                    },
+                    400,
+                )
+                return
             _set_current(new_proj, dirty=True)
             self.send_json(
                 {
@@ -1141,25 +1273,25 @@ class Handler(BaseHTTPRequestHandler):
 
 
 
-    def api_pile_recap(self, pile_id: str):
-        """G1: rekap batang per pile dari dokumen v1."""
+    def api_pile_recap(self, pile_id: str, project: dict | None = None):
+        """G1: rekap batang per pile dari dokumen v1 (di luar STATE_LOCK bila project diberi)."""
         try:
-            from scad_engine.from_v1 import recap_pile
-
-            project = _load_current_project()
-            result = recap_pile(project, pile_id)
+            if project is None:
+                project = _load_current_project()
+            result = _cached_recap_pile(project, pile_id)
             self.send_json({"ok": True, **result})
         except ValueError as e:
             self.send_json({"ok": False, "error": str(e)}, 400)
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)}, 400)
 
-    def api_group_recap(self, group_id: str):
-        """G1: rekap batang per grup (semua pile)."""
+    def api_group_recap(self, group_id: str, project: dict | None = None):
+        """G1: rekap batang per grup (semua pile); perhitungan di luar STATE_LOCK."""
         try:
             from scad_engine.from_v1 import recap_group
 
-            project = _load_current_project()
+            if project is None:
+                project = _load_current_project()
             result = recap_group(project, group_id)
             self.send_json({"ok": True, **result})
         except ValueError as e:
