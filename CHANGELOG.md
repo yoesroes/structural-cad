@@ -1,6 +1,25 @@
 # Changelog
 
-Riwayat ringkas. Angka tes pada entri lama adalah jejak saat itu, bukan klaim baseline sekarang.
+Riwayat ringkas. Baseline tes: jalankan `bash scripts/ci.sh` (jangan andalkan angka di entri lama).
+
+## 2026-11 — P9
+
+- README/status fitur; GitHub Actions (Node 22, `scripts/ci.sh`).
+- MANIFEST: CHANGELOG.md; prune web/node_modules.
+- pyproject: filter DeprecationWarning hanya pilecap_rebar.
+- package.json tanpa vitest; hapus web/vitest.config.ts.
+- Path skema: src/scad/data; komentar parents di validate.
+- ARCHITECTURE_AUDIT diarsipkan (docs/archive/).
+
+## 2026-11 — P0–P8b (develop-p3, tag p6-p8)
+
+- P0–P3b: state, validasi, ekspresi; D6 zona rest.
+- P4: engine; default cover_ref pile cap = surface.
+- P3: polar by spacing → ARR_BAD.
+- P5: recap_group (mark, cut_length).
+- P6: file ops; update-from-source + D1 resolve global.
+- P7/P7b: Host/Origin/Content-Type; CSP; escapeHtml.
+- P8/P8b: UI jujur; recap di luar lock; SVG run-2d unik.
 
 ## 2026-10 — F5 / F6
 

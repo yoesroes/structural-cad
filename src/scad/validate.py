@@ -18,7 +18,8 @@ def _resolve_schema_path() -> Path:
     candidates: list[Path] = [
         here / "data" / "scad.schema.json",  # wheel / pip install / editable
     ]
-    # Tree sumber: core/scad → parents[2] = repo root
+    # here = .../src/scad → parents[0]=src, parents[1]=repo root,
+    # parents[2]=induk repo. Urutan kandidat tidak diubah (P9: komentar saja).
     try:
         candidates.append(here.parents[2] / "schemas" / "scad.schema.json")
     except IndexError:
@@ -51,7 +52,7 @@ def _resolve_schema_path() -> Path:
     raise FileNotFoundError(
         "scad.schema.json tidak ditemukan. Coba: pip install -e . "
         "atau pastikan schemas/scad.schema.json ada di root repo "
-        "(dan core/scad/data/ disalin lewat scripts/sync_schema.sh)."
+        "(dan src/scad/data/ disalin lewat scripts/sync_schema.sh)."
     )
 
 

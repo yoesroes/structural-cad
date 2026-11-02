@@ -7,20 +7,14 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
-_TOOLS = Path(__file__).resolve().parent
-if str(_TOOLS) not in sys.path:
-    sys.path.insert(0, str(_TOOLS))
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
+# Saat: python tools/check_examples.py → tools/ sudah di sys.path[0]
 from mini_validate import validate
 
 _SCHEMA = _ROOT / "schemas" / "scad.schema.json"
-_SCHEMA_PKG = _ROOT / "core" / "scad" / "data" / "scad.schema.json"
+_SCHEMA_PKG = _ROOT / "src" / "scad" / "data" / "scad.schema.json"
 if not _SCHEMA.is_file() and _SCHEMA_PKG.is_file():
     _SCHEMA = _SCHEMA_PKG
 S = json.loads(_SCHEMA.read_text(encoding="utf-8"))

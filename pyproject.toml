@@ -40,5 +40,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
 filterwarnings = [
-    "ignore::DeprecationWarning",
+    "ignore:Paket 'pilecap_rebar' deprecated:DeprecationWarning",
+    "ignore:pilecap_rebar.ui deprecated:DeprecationWarning",
+    "ignore:.*pilecap_rebar.*deprecated:DeprecationWarning",
 ]

@@ -1,3 +1,5 @@
+> Diarsipkan 2026-11; usang sejak F4 (layout src/, bukan core/scad / ui.py).
+
 # Audit kepatuhan — ARCHITECTURE_LAYERS.md
 
 Tanggal audit: 2026-10-23
