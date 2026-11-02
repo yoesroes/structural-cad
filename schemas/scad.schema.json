@@ -558,6 +558,10 @@
         "lap_mid_height": {
           "type": "number"
         },
+        "bend_inside_radius_db": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
         "lap_nesting": {
           "enum": [
             "inside_edge_bars",

@@ -198,16 +198,29 @@ def _place_helix_by_zone(
 
     # Segmen dari atas (mendekati COF) ke bawah: urutkan zona by z_top descending
     ordered = sorted(zids, key=lambda z: float(zm[z].z_top), reverse=True)
+    heights = [float(zm[z].z_top) - float(zm[z].z_bottom) for z in ordered]
+
+    # extend_start (+ = naik) / extend_end (+ = turun) dihitung dari rentang zona dasar.
+    # Perpanjangan memakai pitch zona terluar yang berbatasan (atas / bawah).
+    z_bot, z_top = extent_z_range(item, env)
+    base_top = max(float(zm[z].z_top) for z in zids)
+    base_bot = min(float(zm[z].z_bottom) for z in zids)
+    heights[0] += z_top - base_top
+    heights[-1] += base_bot - z_bot
+    for zid, height in zip(ordered, heights):
+        if height <= 0:
+            raise ValueError(
+                f"extend_start/extend_end memendekkan spiral '{rid}' melebihi "
+                f"tinggi segmen zona '{zid}'"
+            )
+
     segments: list[tuple[float, float]] = []
     total_cut = 0.0
-    for zid in ordered:
-        z = zm[zid]
-        height = float(z.z_top) - float(z.z_bottom)
+    for zid, height in zip(ordered, heights):
         pitch = pitches[zid]
         segments.append((height, pitch))
         total_cut += helix_cut_length_segment(outer, d, height, pitch)
 
-    z_bot, z_top = extent_z_range(item, env)
     # centerline lokal: z=0 di ujung atas, menurun
     cl = build_helix_multi_pitch(outer, d, segments, z0=0.0, downward=True)
     origin = (0.0, 0.0, z_top)
@@ -319,8 +332,10 @@ def place_rebar(item: dict, env: PileEnv) -> list[Placed]:
 
     if pattern == "polar":
         count = int(arr.get("count") or 0)
+        if count < 1:
+            raise ValueError("count polar harus >= 1")
         bundle = int(arr.get("bundle") or 1)
-        start_angle = float(arr.get("start_angle") or 0.0)
+        start_angle = float(arr.get("start_angle_deg") or 0.0)
         r = axis_radius(item, env)
         if btype == "straight":
             cl = build_centerline(

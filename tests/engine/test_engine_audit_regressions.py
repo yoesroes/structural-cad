@@ -25,7 +25,6 @@ def rebar(doc: dict, rid: str) -> dict:
     )
 
 
-@pytest.mark.xfail(strict=True, reason="T3")
 def test_polar_spacing_rejected_with_arr_bad_and_build_raises():
     """D2: polar by spacing harus ditolak (ARR_BAD), bukan menghilangkan batang.
 
@@ -47,7 +46,6 @@ def test_polar_spacing_rejected_with_arr_bad_and_build_raises():
         build_bar_groups(doc, "P1-1")
 
 
-@pytest.mark.xfail(strict=True, reason="T3")
 def test_polar_start_angle_deg_changes_first_origin():
     baseline = build_bar_groups(load_p1(), "P1-1")
     shifted_doc = load_p1()
@@ -58,11 +56,36 @@ def test_polar_start_angle_deg_changes_first_origin():
     assert shifted_origin != baseline_origin
 
 
-@pytest.mark.xfail(strict=True, reason="T4")
 def test_group_totals_each_row_obey_count_times_cut_length():
+    """T4: setiap baris totals memenuhi count * cut_length_mm == total_length_mm."""
     result = recap_group(load_p1(), "BP-P1")
     for row in result["totals"]:
         assert abs(
             float(row["count"]) * float(row["cut_length_mm"])
             - float(row["total_length_mm"])
         ) <= 1e-3
+
+
+def test_group_totals_b4_split_by_cut_length_and_weight_parity():
+    """T4: B4 muncul beberapa baris (panjang beda); berat total ≈ 76878.6 kg."""
+    result = recap_group(load_p1(), "BP-P1")
+    b4_rows = [r for r in result["totals"] if r.get("mark") == "B4" or r["id"] == "B4"]
+    cuts = sorted({round(float(r["cut_length_mm"]), 3) for r in b4_rows}, reverse=True)
+    assert 20280.0 in cuts
+    assert 16280.0 in cuts
+    assert len(b4_rows) >= 2
+    total_weight = sum(float(r["weight_kg"]) for r in result["totals"])
+    assert abs(total_weight - 76878.6) <= 0.1
+    # jumlah count per mark == jumlah count per pile
+    from collections import Counter
+    mark_from_totals: Counter[str] = Counter()
+    for r in result["totals"]:
+        mark_from_totals[str(r.get("mark") or r["id"])] += int(r["count"])
+    mark_from_piles: Counter[str] = Counter()
+    weight_from_piles = 0.0
+    for pile in result["piles"]:
+        for row in pile["rows"]:
+            mark_from_piles[str(row.get("mark") or row["id"])] += int(row["count"])
+            weight_from_piles += float(row["weight_kg"])
+    assert mark_from_totals == mark_from_piles
+    assert abs(total_weight - weight_from_piles) <= 0.15

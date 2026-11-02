@@ -10,8 +10,17 @@ TypeScript di `web/` dilengkapi bridge modular `static/app.js` yang dimuat oleh 
 - `scad-ui --workspace PATH` membatasi operasi buka/simpan berkas ke `PATH`.
 - Data sesi default berada di `output/structural_cad_ui/`, atau di lokasi
   `STRUCTURAL_CAD_DATA` bila variabel lingkungan itu diatur.
-- Server dimaksudkan untuk loopback (`127.0.0.1`). Host non-loopback hanya diberi
-  peringatan di stderr dan tidak mendapat autentikasi tambahan.
+- Server **hanya** menerima loopback: bind host non-loopback ditolak di CLI, dan setiap
+  permintaan HTTP harus membawa header `Host` `127.0.0.1:<port>`, `localhost:<port>`,
+  atau `[::1]:<port>` (selain itu 400).
+- POST wajib `Content-Type: application/json` (selain itu 415). Jika ada header `Origin`,
+  nilainya harus `http://<Host>` (selain itu 403). Tidak ada header CORS.
+- Setiap respons menyertakan `X-Content-Type-Options: nosniff` dan
+  `Content-Security-Policy` lengkap (`default-src`, `script-src`, `style-src`, `object-src`,
+  `base-uri`, `frame-ancestors`). `script-src`/`style-src` masih mengizinkan `'unsafe-inline'`
+  karena handler `onclick` di shell — **utang teknis**. Style atribut inline di shell sudah
+  dipindah ke kelas CSS (`h-first`, `text-muted-inline`, `shape-preview-svg`).
+- Data dokumen yang disisipkan ke `innerHTML` di `static/app.js` melewati `escapeHtml()`.
 
 ## Endpoint aktif
 
@@ -58,6 +67,16 @@ dihapus.
 Project dan elemen harus berupa dokumen v1 dengan `schema_version: 1`. Operasi file
 memvalidasi dokumen sebelum menulis dan menggunakan path relatif terhadap workspace;
 path keluar workspace ditolak.
+
+### Kode galat zona (keputusan D6)
+
+- **`ZONE_REST_OVERRIDE` (error):** override pada zona `rest` tidak boleh dibuat lewat
+  edit apa pun. Dokumen yang sudah memuat override tersebut tetap invalid: ditolak saat
+  open, save, dan save-as dengan HTTP 400. Tidak ada pemangkasan otomatis saat membuka —
+  batasan disengaja, karena aplikasi yang benar tidak pernah menulis override itu.
+- `reset_pile_zone_length` pada zona `rest` tetap ada hanya untuk skrip dan tes (menghapus
+  override yang sudah tersimpan), bukan jalur perbaikan lewat UI.
+- Jalur `update-from-source` yang masih memiliki celah terkait aturan ini ditutup di tugas P6.
 
 ## Frontend dan pengujian
 

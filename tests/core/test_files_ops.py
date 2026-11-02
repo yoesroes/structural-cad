@@ -9,6 +9,7 @@ import pytest
 
 from scad.files_ops import (
     add_element_to_project,
+    list_workspace_files,
     new_project,
     new_element,
     open_document,
@@ -200,3 +201,142 @@ def test_source_diff_and_update_detect_shape_deletion_preserving_local_shape():
     assert "R20" not in updated["shapes"]
     assert updated["shapes"]["LOCAL"] == local_shape
     assert "R87" in updated["shapes"]
+
+
+def test_list_workspace_skips_symlink_outside(tmp_path: Path):
+    """Symlink keluar workspace dilewati, bukan ValueError."""
+    from scad.files_ops import list_workspace_files
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    outside = tmp_path / "outside.elem.json"
+    outside.write_text(
+        json.dumps({"kind": "element", "schema_version": 1, "definition": {"type": "bored_pile"}}),
+        encoding="utf-8",
+    )
+    inside = workspace / "ok.elem.json"
+    inside.write_text(outside.read_text(encoding="utf-8"), encoding="utf-8")
+    try:
+        (workspace / "bad.elem.json").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink tidak didukung")
+    files = list_workspace_files(workspace)
+    paths = {f["path"] for f in files}
+    assert "ok.elem.json" in paths
+    assert "bad.elem.json" not in paths
+    assert not any(p.startswith("/") for p in paths)
+
+
+def test_add_element_rejects_bad_count_and_layout():
+    elem = json.loads((REPO / "examples" / "BP_D1200.elem.json").read_text(encoding="utf-8"))
+    project = new_project("X", "X")
+    with pytest.raises(ValueError, match="count"):
+        add_element_to_project(project, element_doc=elem, group_id="G", count=0)
+    with pytest.raises(ValueError, match="count"):
+        add_element_to_project(project, element_doc=elem, group_id="G", count=1001)
+    with pytest.raises(ValueError, match="cols"):
+        add_element_to_project(
+            project, element_doc=elem, group_id="G", count=2, layout={"cols": 0}
+        )
+    with pytest.raises(ValueError, match="finite|dx"):
+        add_element_to_project(
+            project,
+            element_doc=elem,
+            group_id="G",
+            count=1,
+            layout={"dx": float("inf")},
+        )
+
+
+def test_update_from_source_type_mismatch():
+    elem = json.loads((REPO / "examples" / "BP_D1200.elem.json").read_text(encoding="utf-8"))
+    proj = add_element_to_project(
+        new_project("X", "X"),
+        element_doc=elem,
+        source_file_label="BP_D1200.elem.json",
+        group_id="BP-X",
+        count=1,
+    )
+    other = copy.deepcopy(elem)
+    other["definition"]["type"] = "pile_cap"
+    updated, issues = update_group_from_source(proj, "BP-X", other)
+    assert updated is proj or updated == proj
+    assert any(i.get("code") == "TYPE_MISMATCH" for i in issues)
+
+
+def test_update_from_source_depth_default_follows_or_kept():
+    elem = json.loads((REPO / "examples" / "BP_D1200.elem.json").read_text(encoding="utf-8"))
+    proj = add_element_to_project(
+        new_project("X", "X"),
+        element_doc=elem,
+        source_file_label="BP_D1200.elem.json",
+        group_id="BP-X",
+        count=1,
+    )
+    assert proj["groups"][0]["defaults"]["params"]["depth_below_cof"] == 30000
+
+    # Sumber baru mengubah depth definisi; default belum diubah pengguna -> ikut baru
+    elem_new = copy.deepcopy(elem)
+    elem_new["definition"]["params"]["depth_below_cof"] = 24000
+    updated, issues = update_group_from_source(proj, "BP-X", elem_new)
+    assert not any(i.get("level") == "error" for i in issues)
+    assert updated["groups"][0]["defaults"]["params"]["depth_below_cof"] == 24000
+
+    # Pengguna mengubah default -> dipertahankan + DEFAULT_KEPT
+    updated["groups"][0]["defaults"]["params"]["depth_below_cof"] = 28000
+    elem_newer = copy.deepcopy(elem_new)
+    elem_newer["definition"]["params"]["depth_below_cof"] = 22000
+    updated2, issues2 = update_group_from_source(updated, "BP-X", elem_newer)
+    assert updated2["groups"][0]["defaults"]["params"]["depth_below_cof"] == 28000
+    assert any(i.get("code") == "DEFAULT_KEPT" for i in issues2)
+
+
+def test_update_from_source_rejects_rest_override_d6():
+    """D6: sumber yang menjadikan zona override menjadi rest -> batalkan."""
+    elem = json.loads((REPO / "examples" / "BP_D1200.elem.json").read_text(encoding="utf-8"))
+    proj = add_element_to_project(
+        new_project("X", "X"),
+        element_doc=elem,
+        source_file_label="BP_D1200.elem.json",
+        group_id="BP-X",
+        count=1,
+        naming={"pattern": "P1-8", "start": 1},
+    )
+    # Override Z2
+    proj["groups"][0]["instances"][0]["overrides"] = {"zone_lengths": {"Z2": 7000}}
+    # Sumber: Z2 menjadi rest, Z3 dihapus
+    elem2 = copy.deepcopy(elem)
+    zones = elem2["definition"]["zones"]
+    elem2["definition"]["zones"] = [z for z in zones if z["id"] != "Z3"]
+    for z in elem2["definition"]["zones"]:
+        if z["id"] == "Z2":
+            z["length"] = "rest"
+    for rebar in elem2["definition"].get("rebars") or []:
+        extent = rebar.get("extent") or {}
+        if "zones" in extent:
+            zs = [zid for zid in extent["zones"] if zid != "Z3"]
+            if not zs:
+                zs = ["Z2"]
+            extent["zones"] = zs
+    updated, issues = update_group_from_source(proj, "BP-X", elem2)
+    assert any(i.get("code") == "ZONE_REST_OVERRIDE" for i in issues)
+    # project tidak berubah
+    assert proj["groups"][0]["definition"]["data"]["zones"][-1]["id"] == "Z3"
+
+
+def test_find_source_matches_exact_name_not_glob(tmp_path: Path):
+    """Nama dengan karakter glob diperlakukan literal, bukan pola rglob."""
+    from scad.files_ops import find_source_matches
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    # Berkas literal bernama star.elem.json
+    (workspace / "star.elem.json").write_text("{}", encoding="utf-8")
+    (workspace / "a.elem.json").write_text("{}", encoding="utf-8")
+    (workspace / "b.elem.json").write_text("{}", encoding="utf-8")
+    # Pola glob * tidak boleh mencocokkan semua
+    matches = find_source_matches(workspace, "*.elem.json")
+    assert matches == []
+    matches2 = find_source_matches(workspace, "star.elem.json")
+    assert len(matches2) == 1
+    assert matches2[0].name == "star.elem.json"

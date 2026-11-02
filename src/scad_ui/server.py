@@ -8,9 +8,11 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+from collections import OrderedDict
 import sys
 import threading
 import traceback
+import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -58,6 +60,86 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024
 STATE_LOCK = threading.RLock()
 _KEEP_PATH = object()
+
+# A4: keluaran /run-2d memakai nama unik per request; hanya RUN_2D_KEEP berkas terbaru disimpan.
+RUN_2D_KEEP = 20
+_RUN_2D_LOCK = threading.Lock()
+
+
+def _new_run_2d_target() -> Path:
+    """Path SVG unik per request agar /run-2d bersamaan (di luar STATE_LOCK) tidak saling menimpa."""
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    return DATA_ROOT / f"run-2d-{uuid.uuid4().hex[:12]}.svg"
+
+
+def _prune_run_2d(keep: int = RUN_2D_KEEP) -> None:
+    """Hapus SVG run-2d lama; sisakan `keep` berkas terbaru. Galat I/O diabaikan (best effort)."""
+    with _RUN_2D_LOCK:
+        entries = []
+        for path in DATA_ROOT.glob("run-2d-*.svg"):
+            try:
+                entries.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+        entries.sort(key=lambda item: item[0], reverse=True)
+        for _mtime, path in entries[keep:]:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+# Cache LRU hasil recap_pile: kunci (sha256 dokumen, pile_id)
+_RECAP_PILE_CACHE: OrderedDict[tuple[str, str], dict] = OrderedDict()
+_RECAP_CACHE_MAX = 32
+_RECAP_CACHE_HITS = 0
+_RECAP_CACHE_MISSES = 0
+_RECAP_CACHE_LOCK = threading.Lock()
+
+
+def _snapshot_current_doc() -> dict:
+    """Salinan dokumen sesi; pemanggil harus memegang STATE_LOCK atau memanggil di luar jalur hot."""
+    return copy.deepcopy(_load_current_project())
+
+
+def _cached_recap_pile(doc: dict, pile_id: str) -> dict:
+    """Recap pile dengan cache LRU (maks 32), aman untuk thread."""
+    global _RECAP_CACHE_HITS, _RECAP_CACHE_MISSES
+    from scad.io.canonical import sha256_of
+    from scad_engine.from_v1 import recap_pile
+
+    key = (sha256_of(doc), str(pile_id))
+    with _RECAP_CACHE_LOCK:
+        if key in _RECAP_PILE_CACHE:
+            _RECAP_CACHE_HITS += 1
+            _RECAP_PILE_CACHE.move_to_end(key)
+            return copy.deepcopy(_RECAP_PILE_CACHE[key])
+        _RECAP_CACHE_MISSES += 1
+    result = recap_pile(doc, pile_id)
+    with _RECAP_CACHE_LOCK:
+        _RECAP_PILE_CACHE[key] = result
+        _RECAP_PILE_CACHE.move_to_end(key)
+        while len(_RECAP_PILE_CACHE) > _RECAP_CACHE_MAX:
+            _RECAP_PILE_CACHE.popitem(last=False)
+    return copy.deepcopy(result)
+
+
+def recap_cache_stats() -> dict[str, int]:
+    """Statistik cache untuk tes (hits/misses/ukuran)."""
+    with _RECAP_CACHE_LOCK:
+        return {
+            "hits": _RECAP_CACHE_HITS,
+            "misses": _RECAP_CACHE_MISSES,
+            "size": len(_RECAP_PILE_CACHE),
+        }
+
+
+def reset_recap_cache() -> None:
+    """Kosongkan cache (untuk tes)."""
+    global _RECAP_CACHE_HITS, _RECAP_CACHE_MISSES
+    with _RECAP_CACHE_LOCK:
+        _RECAP_PILE_CACHE.clear()
+        _RECAP_CACHE_HITS = 0
+        _RECAP_CACHE_MISSES = 0
 
 
 def _safe_join(base: Path, rel: str) -> Path | None:
@@ -275,7 +357,87 @@ class Handler(BaseHTTPRequestHandler):
         traceback.print_exc(file=sys.stderr)
         self.send_json({"ok": False, "error": "Galat internal"}, 500)
 
+    def _allowed_hosts(self) -> set[str]:
+        """Host header yang diizinkan: loopback + port server ini."""
+        port = self.server.server_address[1]
+        return {
+            f"127.0.0.1:{port}",
+            f"localhost:{port}",
+            f"[::1]:{port}",
+        }
+
+    def _guard_request(self, *, require_json: bool) -> bool:
+        """Gerbang Host / Origin / Content-Type. False bila respons penolakan sudah dikirim."""
+        host = (self.headers.get("Host") or "").strip()
+        if host not in self._allowed_hosts():
+            self.send_json(
+                {"ok": False, "error": f"Host tidak diizinkan: {host or '(kosong)'}"},
+                400,
+            )
+            return False
+        if require_json:
+            raw_ct = self.headers.get("Content-Type") or ""
+            main_ct = raw_ct.split(";", 1)[0].strip().lower()
+            if main_ct != "application/json":
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": (
+                            "Content-Type harus application/json "
+                            f"(diterima: {raw_ct or '(kosong)'})"
+                        ),
+                    },
+                    415,
+                )
+                return False
+        origin = self.headers.get("Origin")
+        if origin is not None and origin != "":
+            expected = f"http://{host}"
+            if origin != expected:
+                self.send_json(
+                    {"ok": False, "error": f"Origin tidak diizinkan: {origin}"},
+                    403,
+                )
+                return False
+        return True
+
+    def end_headers(self) -> None:
+        """Tambah header keamanan pada setiap respons."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header(
+            "Content-Security-Policy",
+            (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "object-src 'none'; "
+                "base-uri 'none'; "
+                "frame-ancestors 'none'"
+            ),
+        )
+        super().end_headers()
+
     def do_GET(self):
+        if not self._guard_request(require_json=False):
+            return
+        path = urlsplit(self.path).path
+        # Perhitungan berat di luar STATE_LOCK (snapshot di dalam kunci)
+        if (path.startswith("/api/pile/") and path.endswith("/recap")) or (
+            path.startswith("/api/group/") and path.endswith("/recap")
+        ):
+            try:
+                with STATE_LOCK:
+                    project = _snapshot_current_doc()
+                parts = [p for p in path.split("/") if p]
+                if path.startswith("/api/pile/") and len(parts) >= 4:
+                    self.api_pile_recap(parts[2], project=project)
+                elif path.startswith("/api/group/") and len(parts) >= 4:
+                    self.api_group_recap(parts[2], project=project)
+                else:
+                    self.send_error(404, "Not found")
+            except Exception as exc:
+                self._handle_request_exception(exc)
+            return
         with STATE_LOCK:
             try:
                 self._dispatch_get()
@@ -324,6 +486,33 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404, "Not found")
 
     def do_POST(self):
+        if not self._guard_request(require_json=True):
+            return
+        path = urlsplit(self.path).path
+        if path in ("/run-2d", "/run-3d"):
+            try:
+                # Baca body di luar kunci dokumen (hanya rfile)
+                raw_length = self.headers.get("Content-Length", "0")
+                try:
+                    length = int(raw_length)
+                except (TypeError, ValueError):
+                    self.send_json({"ok": False, "error": "Content-Length tidak valid"}, 400)
+                    return
+                if length < 0 or length > MAX_REQUEST_BODY_BYTES:
+                    self.send_json({"ok": False, "error": "Request tidak valid"}, 400)
+                    return
+                body = self.rfile.read(length).decode("utf-8")
+                data = json.loads(body) if body else {}
+                with STATE_LOCK:
+                    if not isinstance(data.get("doc"), dict):
+                        data = {**data, "doc": _snapshot_current_doc()}
+                if path == "/run-2d":
+                    self.run_2d(data)
+                else:
+                    self.run_3d(data)
+            except Exception as exc:
+                self._handle_request_exception(exc)
+            return
         with STATE_LOCK:
             try:
                 self._dispatch_post()
@@ -478,9 +667,9 @@ class Handler(BaseHTTPRequestHandler):
             prims, layers = compose(
                 length, width, height, trans, longitudinal, build_recap(groups)
             )
-            target = DATA_ROOT / "run-2d.svg"
-            target.parent.mkdir(parents=True, exist_ok=True)
+            target = _new_run_2d_target()
             write_svg(prims, layers, target)
+            _prune_run_2d()
             self.send_json({"ok": True, "pile_id": pile_id, "path": str(target), "format": "svg"})
         except (KeyError, TypeError, ValueError) as exc:
             self.send_json({"ok": False, "error": str(exc)}, 400)
@@ -957,7 +1146,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": False, "error": str(e)}, 400)
 
     def api_source_diff(self, group_id: str):
-        from scad.files_ops import open_document, source_diff
+        from scad.files_ops import find_source_matches, open_document, source_diff
 
         project = _load_current_project()
         group = next((g for g in project.get("groups") or [] if g.get("id") == group_id), None)
@@ -969,20 +1158,46 @@ class Handler(BaseHTTPRequestHandler):
         if not file_name:
             self.send_json({"ok": False, "error": "Grup tidak punya source.file"}, 400)
             return
-        # cari di workspace
-        matches = list(WORKSPACE.rglob(file_name))
+        matches = find_source_matches(WORKSPACE, file_name)
         if not matches:
-            self.send_json({"ok": False, "error": f"Berkas sumber '{file_name}' tidak ada di workspace"}, 404)
+            self.send_json(
+                {"ok": False, "error": f"Berkas sumber '{file_name}' tidak ada di workspace"},
+                404,
+            )
+            return
+        if len(matches) > 1:
+            rels = [str(p.relative_to(WORKSPACE.resolve())) for p in matches]
+            self.send_json(
+                {
+                    "ok": False,
+                    "error": (
+                        f"Beberapa berkas bernama '{file_name}' di workspace; "
+                        "sebut path eksplisit"
+                    ),
+                    "matches": rels,
+                },
+                400,
+            )
             return
         try:
-            elem, _ = open_document(WORKSPACE, str(matches[0].relative_to(WORKSPACE)))
+            rel = str(matches[0].relative_to(WORKSPACE.resolve()))
+            elem, _ = open_document(WORKSPACE, rel)
             diffs = source_diff(group, elem, project_shapes=project.get("shapes") or {})
-            self.send_json({"ok": True, "group_id": group_id, "diffs": diffs, "source_file": file_name})
+            self.send_json(
+                {
+                    "ok": True,
+                    "group_id": group_id,
+                    "diffs": diffs,
+                    "source_file": file_name,
+                    "path": rel,
+                }
+            )
         except ValueError as e:
             self.send_json({"ok": False, "error": str(e)}, 400)
 
+
     def api_update_from_source(self, group_id: str, data):
-        from scad.files_ops import open_document, update_group_from_source
+        from scad.files_ops import find_source_matches, open_document, update_group_from_source
 
         project = _load_current_project()
         group = next((g for g in project.get("groups") or [] if g.get("id") == group_id), None)
@@ -993,45 +1208,118 @@ class Handler(BaseHTTPRequestHandler):
         if not path:
             src = (group.get("definition") or {}).get("source") or {}
             file_name = src.get("file")
-            matches = list(WORKSPACE.rglob(file_name)) if file_name else []
+            matches = find_source_matches(WORKSPACE, file_name) if file_name else []
             if not matches:
                 self.send_json({"ok": False, "error": "path sumber wajib"}, 400)
                 return
-            path = str(matches[0].relative_to(WORKSPACE))
+            if len(matches) > 1:
+                rels = [str(p.relative_to(WORKSPACE.resolve())) for p in matches]
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": (
+                            f"Beberapa berkas bernama '{file_name}' di workspace; "
+                            "sebut path eksplisit"
+                        ),
+                        "matches": rels,
+                    },
+                    400,
+                )
+                return
+            path = str(matches[0].relative_to(WORKSPACE.resolve()))
         try:
             elem, _ = open_document(WORKSPACE, path)
             new_proj, issues = update_group_from_source(project, group_id, elem)
-            if issues:
+            errors = [i for i in issues if i.get("level") == "error"]
+            if errors:
                 self.send_json(
-                    {"ok": False, "error": "Override tidak valid; pembaruan dibatalkan", "issues": issues},
+                    {
+                        "ok": False,
+                        "error": "Pembaruan dibatalkan",
+                        "issues": issues,
+                    },
+                    400,
+                )
+                return
+            # Validasi dokumen hasil sebelum mengubah sesi
+            val_errors = _validation_errors(new_proj)
+            if val_errors:
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": "Validasi gagal; pembaruan dibatalkan",
+                        "issues": val_errors,
+                    },
+                    400,
+                )
+                return
+            # D1/T2: tolak bila resolve menghasilkan error (mis. ZONE_DEPTH_SHORT)
+            from scad.resolve import resolve_project
+
+            resolved = resolve_project(new_proj)
+            resolve_errors = [
+                i
+                for i in (resolved.get("issues") or [])
+                if (i.get("level") if isinstance(i, dict) else getattr(i, "level", None))
+                == "error"
+            ]
+            # Normalisasi ke dict
+            norm_errors = []
+            for i in resolve_errors:
+                if isinstance(i, dict):
+                    norm_errors.append(i)
+                else:
+                    norm_errors.append(
+                        {
+                            "level": getattr(i, "level", "error"),
+                            "code": getattr(i, "code", ""),
+                            "path": getattr(i, "path", ""),
+                            "message": getattr(i, "message", str(i)),
+                        }
+                    )
+            if norm_errors:
+                self.send_json(
+                    {
+                        "ok": False,
+                        "error": "Resolve gagal; pembaruan dibatalkan",
+                        "issues": norm_errors,
+                    },
                     400,
                 )
                 return
             _set_current(new_proj, dirty=True)
-            self.send_json({"ok": True, "project": new_proj, "dirty": True})
+            self.send_json(
+                {
+                    "ok": True,
+                    "project": new_proj,
+                    "dirty": True,
+                    "issues": issues,
+                }
+            )
         except ValueError as e:
             self.send_json({"ok": False, "error": str(e)}, 400)
 
 
-    def api_pile_recap(self, pile_id: str):
-        """G1: rekap batang per pile dari dokumen v1."""
-        try:
-            from scad_engine.from_v1 import recap_pile
 
-            project = _load_current_project()
-            result = recap_pile(project, pile_id)
+    def api_pile_recap(self, pile_id: str, project: dict | None = None):
+        """G1: rekap batang per pile dari dokumen v1 (di luar STATE_LOCK bila project diberi)."""
+        try:
+            if project is None:
+                project = _load_current_project()
+            result = _cached_recap_pile(project, pile_id)
             self.send_json({"ok": True, **result})
         except ValueError as e:
             self.send_json({"ok": False, "error": str(e)}, 400)
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)}, 400)
 
-    def api_group_recap(self, group_id: str):
-        """G1: rekap batang per grup (semua pile)."""
+    def api_group_recap(self, group_id: str, project: dict | None = None):
+        """G1: rekap batang per grup (semua pile); perhitungan di luar STATE_LOCK."""
         try:
             from scad_engine.from_v1 import recap_group
 
-            project = _load_current_project()
+            if project is None:
+                project = _load_current_project()
             result = recap_group(project, group_id)
             self.send_json({"ok": True, **result})
         except ValueError as e:

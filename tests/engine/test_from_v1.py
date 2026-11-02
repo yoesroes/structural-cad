@@ -59,8 +59,8 @@ def test_p1_8_b1_and_spiral_with_z2_override():
 def test_recap_group_nine_piles():
     rg = recap_group(DOC, "BP-P1")
     assert len(rg["piles"]) == 9
-    b1 = next(t for t in rg["totals"] if t["id"] == "B1")
-    assert b1["count"] == 56 * 9
+    b1_count = sum(int(t["count"]) for t in rg["totals"] if t["id"] == "B1")
+    assert b1_count == 56 * 9
 
 
 def test_build_bar_groups_total_instances():

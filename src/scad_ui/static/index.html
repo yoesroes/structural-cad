@@ -21,17 +21,17 @@
 
   <div class="dropdown" id="menu-file">
     <div class="h">Project</div>
-    <div class="mi" onclick="action('new-project')">Baru…</div>
-    <div class="mi" onclick="action('open-project')">Buka…</div>
+    <div class="mi disabled" title="Belum tersedia" aria-disabled="true">Baru…</div>
+    <div class="mi disabled" title="Belum tersedia" aria-disabled="true">Buka…</div>
     <div class="mi" onclick="action('save-project')">Simpan</div>
-    <div class="mi" onclick="action('save-project-as')">Simpan Sebagai…</div>
+    <div class="mi disabled" title="Belum tersedia" aria-disabled="true">Simpan Sebagai…</div>
     <div class="h sep">File Elemen</div>
-    <div class="mi">Baru…</div>
-    <div class="mi">Buka…</div>
-    <div class="mi">Simpan</div>
-    <div class="mi">Simpan Sebagai…</div>
+    <div class="mi disabled" title="Belum tersedia" aria-disabled="true">Baru…</div>
+    <div class="mi disabled" title="Belum tersedia" aria-disabled="true">Buka…</div>
+    <div class="mi disabled" title="Belum tersedia" aria-disabled="true">Simpan</div>
+    <div class="mi disabled" title="Belum tersedia" aria-disabled="true">Simpan Sebagai…</div>
     <div class="divider"></div>
-    <div class="mi">Tambahkan File Elemen ke Project…</div>
+    <div class="mi disabled" title="Belum tersedia" aria-disabled="true">Tambahkan File Elemen ke Project…</div>
     <div class="mi">Perbarui Definisi dari File…</div>
     <div class="divider"></div>
     <div class="mi">Keluar</div>
@@ -55,7 +55,7 @@
     <div class="tree-item active" data-pile="P1-1">P1-1</div>
     <div class="tree-item" data-pile="P1-2">P1-2 <span class="ov">● 26000</span></div>
     <div class="tree-item" data-pile="P1-3">P1-3</div>
-    <div class="tree-item" style="color:var(--muted)">… P1-9</div>
+    <div class="tree-item text-muted-inline">… P1-9</div>
     <div class="tree-muted">Pile cap</div>
     <div class="tree-muted">Pier (belum ada)</div>
   </div>
@@ -75,7 +75,7 @@
 
   <!-- PROPERTIES -->
   <div id="props">
-    <div class="h" style="margin-top:0">Grup BP-P1</div>
+    <div class="h h-first">Grup BP-P1</div>
     <div class="r"><span>Diameter</span><span>1200 mm</span></div>
     <div class="r"><span>Selimut (ke permukaan)</span><span>75 mm</span></div>
     <div class="r"><span>Beton / Baja</span><span>fc30 / fy420 ulir</span></div>
@@ -83,11 +83,11 @@
     <div class="h">Tulangan</div>
     <div class="r"><span>B1 Lurus D32 · 2×28</span><span>Z0–Z2</span></div>
     <div class="r"><span>B2 Spiral D16 @75</span><span>Z1</span></div>
-    <div class="r"><span>B3 O-ring D16 @200</span><span>Z2</span></div>
-    <button class="btn-accent" onclick="openRebarModal()">+ Tambah tulangan</button>
+    <div class="r"><span>B4 long. D16</span><span>Z3</span></div>
+    <button class="btn-accent" disabled title="Belum tersedia">+ Tambah tulangan</button>
 
     <div class="h">Pemeriksaan</div>
-    <div class="r"><span>Jumlah vs rumus</span><span class="status-ok">Sesuai</span></div>
+    <div class="r"><span>Jumlah vs rumus</span><span class="status-ok">—</span></div>
     <div class="r"><span>Spasi bersih</span><span class="status-warn">2 peringatan</span></div>
     <div class="r"><span>Bentrok</span><span class="status-ok">0</span></div>
   </div>
@@ -113,7 +113,7 @@
         <td>-3000</td>
         <td>30000 (grup)</td>
         <td>19000</td>
-        <td>Sesuai</td>
+        <td class="status-ok">—</td>
       </tr>
       <tr>
         <td>P1-2</td>
@@ -121,7 +121,7 @@
         <td>-3000</td>
         <td class="ov">26000 ●</td>
         <td>15000</td>
-        <td>Sesuai</td>
+        <td class="status-ok">—</td>
       </tr>
       <tr>
         <td>P1-3</td>
@@ -129,7 +129,7 @@
         <td>-3000</td>
         <td>30000 (grup)</td>
         <td>19000</td>
-        <td>Sesuai</td>
+        <td class="status-ok">—</td>
       </tr>
     </tbody>
   </table>
@@ -153,12 +153,12 @@
     </div>
     <div class="modal-body">
       <div>
-        <div class="h" style="margin-top:0">Bentuk (library)</div>
+        <div class="h h-first">Bentuk (library)</div>
         <div class="shape-item">R20 · Lurus</div>
         <div class="shape-item selected">R87 · Spiral</div>
         <div class="shape-item">RING · O-ring</div>
-        <div class="shape-item" style="color:var(--muted)">Dari BS 8666… (nanti)</div>
-        <svg viewBox="0 0 200 150" style="width:100%;margin-top:10px" role="img" aria-label="Pratinjau spiral">
+        <div class="shape-item text-muted-inline">Dari BS 8666… (nanti)</div>
+        <svg viewBox="0 0 200 150" class="shape-preview-svg" role="img" aria-label="Pratinjau spiral">
           <g fill="none" stroke="#2a7a4b" stroke-width="2">
             <path d="M60 20 Q140 28 140 38 Q60 46 60 56 Q140 64 140 74 Q60 82 60 92 Q140 100 140 110 Q60 118 60 128"/>
           </g>
@@ -166,7 +166,7 @@
         </svg>
       </div>
       <div>
-        <div class="h" style="margin-top:0">Parameter</div>
+        <div class="h h-first">Parameter</div>
         <label class="lb" for="d">Diameter batang (mm)</label>
         <input id="d" class="fm" value="16">
         <label class="lb" for="s">Spasi / pitch (mm)</label>
@@ -188,7 +188,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeRebarModal()">Batal</button>
-      <button class="btn btn-primary" onclick="addRebar()">Tambahkan</button>
+      <button class="btn btn-primary" disabled title="Belum tersedia">Tambahkan</button>
     </div>
   </div>
 </div>

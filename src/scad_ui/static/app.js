@@ -2,6 +2,20 @@
   let projectDoc = null;
   let resolveData = null;
 
+  /** Escape teks dokumen sebelum disisipkan ke innerHTML (mitigasi XSS). */
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+  // Ekspor untuk uji Node (tidak mengubah perilaku UI)
+  if (typeof globalThis !== 'undefined') {
+    globalThis.__scadEscapeHtml = escapeHtml;
+  }
+
   // --- Menu dropdown ---
   const fileMenu = document.getElementById('menu-file');
   document.querySelectorAll('.menu-item').forEach(item => {
@@ -46,16 +60,20 @@
     const piles = (resolved?.groups || []).find(g => g.id === group.id)?.piles || [];
     const pileMap = Object.fromEntries(piles.map(p => [p.id, p]));
     let html = '<div class="h">Pohon</div>';
-    html += `<div class="tree-root">${doc.project?.name || doc.project?.id || 'Project'}</div>`;
+    const rootName = escapeHtml(doc.project?.name || doc.project?.id || 'Project');
+    html += `<div class="tree-root">${rootName}</div>`;
     const n = (group.instances || []).length;
-    html += `<div class="tree-group active" data-group="${group.id}">${group.id} · ${group.type || 'element'} (${n})</div>`;
+    const gid = escapeHtml(group.id);
+    const gtype = escapeHtml(group.type || 'element');
+    html += `<div class="tree-group active" data-group="${gid}">${gid} · ${gtype} (${n})</div>`;
     (group.instances || []).forEach((inst, idx) => {
       const rp = pileMap[inst.id];
       const ov = rp && rp.overridden && rp.overridden.includes('depth_below_cof');
-      const depth = rp ? rp.depth_below_cof : '';
+      const depth = rp ? escapeHtml(rp.depth_below_cof) : '';
       const mark = ov ? ` <span class="ov">● ${depth}</span>` : '';
       const active = idx === 0 ? ' active' : '';
-      html += `<div class="tree-item${active}" data-pile="${inst.id}">${inst.id}${mark}</div>`;
+      const pid = escapeHtml(inst.id);
+      html += `<div class="tree-item${active}" data-pile="${pid}">${pid}${mark}</div>`;
     });
     sidebar.innerHTML = html;
 
@@ -73,6 +91,43 @@
     });
   }
 
+  function statusForPile(pileId, resolved) {
+    const all = resolved?.issues || [];
+    // Issue per-pile: cocokkan id secara persis (bukan substring path)
+    const forPile = all.filter(
+      (i) => i.pile != null && String(i.pile) === String(pileId)
+    );
+    // Error global: level error tanpa atribut pile (validasi dokumen, dsb.)
+    const globalErrors = all.filter(
+      (i) =>
+        i.level === "error" &&
+        (i.pile == null || i.pile === "")
+    );
+
+    const pileErrors = forPile.filter((i) => i.level === "error");
+    if (pileErrors.length) {
+      const codes = [...new Set(pileErrors.map((i) => i.code || "ERROR"))];
+      return { text: codes.join(", "), cls: "status-err" };
+    }
+    if (globalErrors.length) {
+      const codes = [...new Set(globalErrors.map((i) => i.code || "ERROR"))];
+      return {
+        text: "Error proyek: " + codes.join(", "),
+        cls: "status-err",
+      };
+    }
+    const warns = forPile.filter((i) => i.level === "warning");
+    if (warns.length) {
+      const codes = [...new Set(warns.map((i) => i.code || "WARN"))];
+      return { text: codes.join(", "), cls: "status-warn" };
+    }
+    return { text: "Sesuai", cls: "status-ok" };
+  }
+  if (typeof globalThis !== "undefined") {
+    globalThis.__scadStatusForPile = statusForPile;
+  }
+
+
   function renderTable(resolved) {
     const group = (resolved?.groups || [])[0];
     const piles = group?.piles || [];
@@ -80,17 +135,18 @@
     if (!tbody) return;
     tbody.innerHTML = piles.map(p => {
       const z3 = (p.zones || []).find(z => z.id === 'Z3');
-      const z3len = z3 ? z3.length : '—';
+      const z3len = z3 ? escapeHtml(z3.length) : '—';
       const depthCell = (p.overridden || []).includes('depth_below_cof')
-        ? `<td class="ov">${p.depth_below_cof} ●</td>`
-        : `<td>${p.depth_below_cof} (grup)</td>`;
+        ? `<td class="ov">${escapeHtml(p.depth_below_cof)} ●</td>`
+        : `<td>${escapeHtml(p.depth_below_cof)} (grup)</td>`;
+      const st = statusForPile(p.id, resolved);
       return `<tr>
-        <td>${p.id}</td>
-        <td>${p.x ?? ''}</td>
-        <td>${p.y ?? ''}</td>
+        <td>${escapeHtml(p.id)}</td>
+        <td>${escapeHtml(p.x ?? '')}</td>
+        <td>${escapeHtml(p.y ?? '')}</td>
         ${depthCell}
         <td>${z3len}</td>
-        <td>Sesuai</td>
+        <td class="${st.cls}">${escapeHtml(st.text)}</td>
       </tr>`;
     }).join('');
   }
@@ -102,20 +158,20 @@
     const mats = data.materials || doc.materials || {};
     const rebars = data.rebars || [];
     const depth = pileResolved ? pileResolved.depth_below_cof : params.depth_below_cof;
-    let html = `<div class="h" style="margin-top:0">Grup ${group.id}</div>`;
-    html += `<div class="r"><span>Diameter</span><span>${params.diameter ?? '—'} mm</span></div>`;
-    html += `<div class="r"><span>Kedalaman</span><span>${depth ?? '—'} mm</span></div>`;
-    html += `<div class="r"><span>Selimut</span><span>${params.cover ?? '—'} mm (${params.cover_ref || ''})</span></div>`;
+    let html = `<div class="h h-first">Grup ${escapeHtml(group.id)}</div>`;
+    html += `<div class="r"><span>Diameter</span><span>${escapeHtml(params.diameter ?? '—')} mm</span></div>`;
+    html += `<div class="r"><span>Kedalaman</span><span>${escapeHtml(depth ?? '—')} mm</span></div>`;
+    html += `<div class="r"><span>Selimut</span><span>${escapeHtml(params.cover ?? '—')} mm (${escapeHtml(params.cover_ref || '')})</span></div>`;
     const beton = mats.concrete?.grade || '—';
     const baja = mats.steel?.grade || '—';
-    html += `<div class="r"><span>Beton / Baja</span><span>${beton} / ${baja}</span></div>`;
+    html += `<div class="r"><span>Beton / Baja</span><span>${escapeHtml(beton)} / ${escapeHtml(baja)}</span></div>`;
     html += `<div class="h">Tulangan</div>`;
     rebars.forEach(r => {
       const shape = r.shape?.code || r.shape || '';
       const zones = (r.extent?.zones || []).join(',');
-      html += `<div class="r"><span>${r.id} ${shape} D${r.diameter}</span><span>${zones}</span></div>`;
+      html += `<div class="r"><span>${escapeHtml(r.id)} ${escapeHtml(shape)} D${escapeHtml(r.diameter)}</span><span>${escapeHtml(zones)}</span></div>`;
     });
-    html += `<button class="btn-accent" onclick="openRebarModal()">+ Tambah tulangan</button>`;
+    html += `<button class="btn-accent" disabled title="Belum tersedia">+ Tambah tulangan</button>`;
     html += `<div class="h">Pemeriksaan</div>`;
     const nIssues = (resolveData?.issues || []).length;
     html += `<div class="r"><span>Issue resolve</span><span class="${nIssues ? 'status-warn' : 'status-ok'}">${nIssues || 0}</span></div>`;
@@ -143,7 +199,7 @@
   <g font-size="12" fill="#1d2330">
     <text x="225" y="50">Z0 (di atas Cof)</text>
     <text x="225" y="100">Z1 · B1 · B2</text>
-    <text x="225" y="200">Z2 · B1 · B3</text>
+    <text x="225" y="200">Z2 · B1</text>
     <text x="225" y="360">Z3 (fleksibel / rest)</text>
     <text x="225" y="465" fill="#5a6270">ujung pile</text>
     <text x="60" y="64" fill="#1f5fd0">Cof</text>
@@ -165,6 +221,7 @@
     <circle cx="461" cy="131" r="4"/>
   </g>
   <text x="440" y="270" font-size="12" fill="#1d2330">Potongan skematik</text>
+  <text x="40" y="20" font-size="11" fill="#5a6270">Ilustrasi skematik, bukan data model</text>
   <text x="440" y="290" font-size="12" fill="#5a6270">Data dari project v1</text>
 </svg>`;
     document.getElementById('canvas-body').innerHTML = svg;
@@ -216,7 +273,8 @@
 
   // --- Modal ---
   window.openRebarModal = function () {
-    document.getElementById('rebar-modal').classList.add('show');
+    // Fitur belum dihubungkan ke model v1
+    document.getElementById('cmd-input').placeholder = 'Tambah tulangan: belum tersedia';
   };
   window.closeRebarModal = function () {
     document.getElementById('rebar-modal').classList.remove('show');
@@ -275,7 +333,11 @@
         document.getElementById('cmd-input').placeholder =
           d.ok ? `Tersimpan: ${d.path}` : (d.error || 'Gagal simpan');
       });
+      return;
     }
+    // Baru / Buka / Simpan Sebagai belum dihubungkan ke UI
+    document.getElementById('cmd-input').placeholder =
+      'Perintah belum tersedia: ' + name;
   };
 
   loadProject();
