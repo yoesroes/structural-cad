@@ -92,21 +92,41 @@
   }
 
   function statusForPile(pileId, resolved) {
-    const issues = (resolved?.issues || []).filter(i => {
-      return i.pile != null && String(i.pile) === String(pileId);
-    });
-    const errors = issues.filter(i => i.level === 'error');
-    if (errors.length) {
-      const codes = [...new Set(errors.map(i => i.code || 'ERROR'))];
-      return { text: codes.join(', '), cls: 'status-warn' };
+    const all = resolved?.issues || [];
+    // Issue per-pile: cocokkan id secara persis (bukan substring path)
+    const forPile = all.filter(
+      (i) => i.pile != null && String(i.pile) === String(pileId)
+    );
+    // Error global: level error tanpa atribut pile (validasi dokumen, dsb.)
+    const globalErrors = all.filter(
+      (i) =>
+        i.level === "error" &&
+        (i.pile == null || i.pile === "")
+    );
+
+    const pileErrors = forPile.filter((i) => i.level === "error");
+    if (pileErrors.length) {
+      const codes = [...new Set(pileErrors.map((i) => i.code || "ERROR"))];
+      return { text: codes.join(", "), cls: "status-err" };
     }
-    const warns = issues.filter(i => i.level === 'warning');
+    if (globalErrors.length) {
+      const codes = [...new Set(globalErrors.map((i) => i.code || "ERROR"))];
+      return {
+        text: "Error proyek: " + codes.join(", "),
+        cls: "status-err",
+      };
+    }
+    const warns = forPile.filter((i) => i.level === "warning");
     if (warns.length) {
-      const codes = [...new Set(warns.map(i => i.code || 'WARN'))];
-      return { text: codes.join(', '), cls: 'status-warn' };
+      const codes = [...new Set(warns.map((i) => i.code || "WARN"))];
+      return { text: codes.join(", "), cls: "status-warn" };
     }
-    return { text: 'Sesuai', cls: 'status-ok' };
+    return { text: "Sesuai", cls: "status-ok" };
   }
+  if (typeof globalThis !== "undefined") {
+    globalThis.__scadStatusForPile = statusForPile;
+  }
+
 
   function renderTable(resolved) {
     const group = (resolved?.groups || [])[0];

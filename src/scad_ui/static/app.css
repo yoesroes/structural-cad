@@ -400,3 +400,9 @@ button[disabled].btn-accent {
   pointer-events: none;
   cursor: not-allowed;
 }
+
+/* P8 status: error validasi global atau per-pile */
+.status-err {
+  color: var(--danger, #b3261e);
+  font-weight: 600;
+}
