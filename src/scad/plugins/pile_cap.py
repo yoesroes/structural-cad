@@ -54,6 +54,14 @@ class PileCapPlugin(ElementPlugin):
             "cover_ref": "surface",
         }
 
+    def allowed_shapes(self, features: set[str]) -> list[str]:
+        """Bentuk tulangan utama pile cap; bursting dipisahkan."""
+        return ["R20", "U", "U-INV", "X-HOOK-135-90", "X-HOOK-135-135"]
+
+    def bursting_shapes(self) -> list[str]:
+        """Bentuk bursting steel yang tersedia bila tendon diaktifkan."""
+        return ["R87", "RING"]
+
     def faces(self) -> list[str]:
         return ["top", "bottom", "x-", "x+", "y-", "y+"]
 

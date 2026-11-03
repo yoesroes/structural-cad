@@ -31,7 +31,7 @@ TypeScript di `web/` dilengkapi bridge modular `static/app.js` yang dimuat oleh 
 | `/`, `/index.html` | Shell HTML |
 | `/static/...` | Aset di bawah `static/` saja; traversal URL dan symlink keluar ditolak dengan 404 |
 | `/api/project` | Project aktif dari data sesi atau contoh `P1.project.json` |
-| `/api/element/<type>/schema` | Metadata plugin: `params_schema`, `faces`, dan `overridable_params` |
+| `/api/element/<type>/schema` | Metadata plugin: `params_schema`, `faces`, `overridable_params`, `allowed_shapes`, dan `bursting_shapes` |
 | `/api/pile/<id>/recap` | Rekap tulangan pile |
 | `/api/group/<id>/recap` | Rekap gabungan satu grup |
 | `/api/group/<id>/source-diff` | Perbandingan hash definisi tertanam dengan file sumber |
@@ -83,3 +83,8 @@ path keluar workspace ditolak.
 `web/src/commands/` berisi logika perintah murni (`SET`, `RESET`, menu file, dan
 `applyOperation`) yang diuji dengan `node:test`. `static/app.js` menyediakan API modular
 untuk Open, Validate, Save, Run 2D, dan Run 3D pada halaman aktif.
+
+Dialog bentuk tulangan mengambil `allowed_shapes` dari schema plugin. Jika
+definisi elemen memiliki `features: ["post_tensioning"]`, dialog juga
+menampilkan `bursting_shapes`; daftar tersebut tidak menjadi pilihan utama
+pile cap dan setiap item bursting harus disimpan dengan `purpose: "bursting"`.

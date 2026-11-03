@@ -792,6 +792,8 @@ class Handler(BaseHTTPRequestHandler):
                     "params_schema": plugin.params_schema(),
                     "faces": plugin.faces(),
                     "overridable_params": plugin.overridable_params(),
+                    "allowed_shapes": plugin.allowed_shapes(set()),
+                    "bursting_shapes": plugin.bursting_shapes(),
                 }
             )
         except KeyError:

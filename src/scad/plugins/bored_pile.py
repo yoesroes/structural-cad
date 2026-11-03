@@ -34,6 +34,14 @@ class BoredPilePlugin(ElementPlugin):
             "cover_ref": "surface",
         }
 
+    def allowed_shapes(self, features: set[str]) -> list[str]:
+        """Bored pile hanya memakai lurus, spiral, dan ring."""
+        return ["R20", "R87", "RING"]
+
+    def bursting_shapes(self) -> list[str]:
+        """Bored pile tidak memiliki katalog bursting steel."""
+        return []
+
     def faces(self) -> list[str]:
         return ["outer", "top", "bottom", "axis"]
 

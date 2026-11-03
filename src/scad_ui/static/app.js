@@ -178,6 +178,43 @@
     props.innerHTML = html;
   }
 
+  function renderShapeOptions(schema, features) {
+    const host = document.getElementById('shape-options');
+    if (!host) return;
+    const main = Array.isArray(schema?.allowed_shapes) ? schema.allowed_shapes : [];
+    const bursting = Array.isArray(schema?.bursting_shapes) ? schema.bursting_shapes : [];
+    const hasTendon = Array.isArray(features) && features.includes('post_tensioning');
+    let html = main.map((code, index) =>
+      `<div class="shape-item${index === 0 ? ' selected' : ''}" data-shape="${escapeHtml(code)}">${escapeHtml(code)}</div>`
+    ).join('');
+    if (hasTendon && bursting.length) {
+      html += '<div class="h">Bursting steel</div>';
+      html += bursting.map(code =>
+        `<div class="shape-item" data-shape="${escapeHtml(code)}">${escapeHtml(code)} · bursting</div>`
+      ).join('');
+    }
+    host.innerHTML = html || '<div class="shape-item text-muted-inline">Tidak ada bentuk tersedia</div>';
+    host.querySelectorAll('.shape-item[data-shape]').forEach(item => {
+      item.addEventListener('click', () => {
+        host.querySelectorAll('.shape-item').forEach(shape => shape.classList.remove('selected'));
+        item.classList.add('selected');
+      });
+    });
+  }
+
+  async function loadShapeOptions(elemType, features) {
+    const host = document.getElementById('shape-options');
+    if (!host || !elemType) return;
+    try {
+      const res = await fetch(`/api/element/${encodeURIComponent(elemType)}/schema`);
+      const schema = await res.json();
+      if (!schema.ok) throw new Error(schema.error || 'Gagal memuat katalog bentuk');
+      renderShapeOptions(schema, features);
+    } catch (err) {
+      host.innerHTML = `<div class="shape-item text-muted-inline">${escapeHtml(err.message || 'Katalog bentuk tidak tersedia')}</div>`;
+    }
+  }
+
   function renderCanvas() {
     const svg = `
 <svg viewBox="0 0 640 490" width="720" height="490" role="img"
@@ -249,6 +286,10 @@
       if (ptab) ptab.textContent = name;
 
       const group = (projectDoc.groups || [])[0];
+      if (group) {
+        const data = (group.definition || {}).data || {};
+        await loadShapeOptions(group.type, data.features || []);
+      }
       renderSidebar(projectDoc, resolveData);
       renderTable(resolveData);
       if (group) {
@@ -286,13 +327,6 @@
   document.getElementById('rebar-modal').addEventListener('click', (e) => {
     if (e.target.id === 'rebar-modal') closeRebarModal();
   });
-  document.querySelectorAll('.shape-item').forEach(item => {
-    item.addEventListener('click', () => {
-      document.querySelectorAll('.shape-item').forEach(s => s.classList.remove('selected'));
-      item.classList.add('selected');
-    });
-  });
-
   document.getElementById('cmd-input').addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
     const cmd = e.target.value.trim();

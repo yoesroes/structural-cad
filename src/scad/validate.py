@@ -11,6 +11,8 @@ from jsonschema.exceptions import ValidationError
 from scad.expr import check_expression
 from scad.issues import Issue
 from scad.io.canonical import sha256_of
+from scad.plugins import get_plugin
+from scad.shapes import SUPPORTED_BUILDERS
 
 def _resolve_schema_path() -> Path:
     """Cari skema: data paket terinstal dulu, lalu tree sumber (repo/schemas)."""
@@ -276,6 +278,92 @@ def _ref_missing_for_definition(
                 )
 
 
+def _shape_map(shapes: Any) -> dict[str, dict[str, Any]]:
+    if isinstance(shapes, dict):
+        return {str(k): v for k, v in shapes.items() if isinstance(v, dict)}
+    if isinstance(shapes, list):
+        return {
+            str(item.get("code")): item
+            for item in shapes
+            if isinstance(item, dict) and item.get("code")
+        }
+    return {}
+
+
+def _shape_context_issues(
+    definition: dict[str, Any], shapes: Any, path_prefix: str
+) -> list[Issue]:
+    """Pastikan bentuk tulangan sesuai tipe elemen dan fitur yang aktif."""
+    type_id = definition.get("type")
+    if not isinstance(type_id, str):
+        return []
+    try:
+        plugin = get_plugin(type_id)
+    except KeyError:
+        return []
+
+    raw_features = definition.get("features")
+    features = {str(feature) for feature in raw_features} if isinstance(raw_features, list) else set()
+    allowed = plugin.allowed_shapes(features)
+    bursting = plugin.bursting_shapes()
+    shape_defs = _shape_map(shapes)
+    issues: list[Issue] = []
+
+    for i, rebar in enumerate(definition.get("rebars") or []):
+        if not isinstance(rebar, dict):
+            continue
+        shape = rebar.get("shape")
+        code = shape.get("code") if isinstance(shape, dict) else None
+        if not isinstance(code, str):
+            continue
+        purpose = rebar.get("purpose", "main")
+        path = f"{path_prefix}/rebars/{i}/shape"
+        if purpose == "bursting":
+            if "post_tensioning" not in features or code not in bursting:
+                issues.append(
+                    Issue(
+                        level="error",
+                        code="SHAPE_NOT_ALLOWED",
+                        path=path,
+                        message=(
+                            f"Bentuk '{code}' pada elemen '{type_id}' hanya boleh sebagai "
+                            f"bursting dengan fitur post_tensioning; pilihan bursting: {bursting}"
+                        ),
+                    )
+                )
+                continue
+        elif code not in allowed:
+            issues.append(
+                Issue(
+                    level="error",
+                    code="SHAPE_NOT_ALLOWED",
+                    path=path,
+                    message=(
+                        f"Bentuk '{code}' tidak diizinkan untuk elemen '{type_id}'; "
+                        f"pilihan utama: {allowed}"
+                    ),
+                )
+            )
+            continue
+
+        shape_def = shape_defs.get(code)
+        builder = shape_def.get("builder") if isinstance(shape_def, dict) else None
+        builder_type = builder.get("type") if isinstance(builder, dict) else None
+        if builder_type not in SUPPORTED_BUILDERS:
+            issues.append(
+                Issue(
+                    level="error",
+                    code="SHAPE_UNSUPPORTED",
+                    path=path,
+                    message=(
+                        f"Bentuk '{code}' memakai builder '{builder_type}' yang belum didukung; "
+                        f"builder yang didukung: {sorted(SUPPORTED_BUILDERS)}"
+                    ),
+                )
+            )
+    return issues
+
+
 def _runtime_expression_names(definition: dict[str, Any]) -> set[str]:
     """Nama variabel yang benar-benar tersedia saat evaluate di placement.
 
@@ -389,6 +477,7 @@ def _cross_checks(doc: dict[str, Any]) -> list[Issue]:
         )
         _zone_rest_issues(definition.get("zones") or [], "/definition/zones", issues)
         _ref_missing_for_definition(definition, shapes, "/definition", issues)
+        issues.extend(_shape_context_issues(definition, shapes, "/definition"))
         _pos_cycle_issues(definition.get("rebars") or [], "/definition/rebars", issues)
         issues.extend(_expression_and_arrangement_issues(definition, "/definition", shapes))
 
@@ -456,6 +545,11 @@ def _cross_checks(doc: dict[str, Any]) -> list[Issue]:
             )
             _ref_missing_for_definition(
                 definition, shapes, f"/groups/{gi}/definition/data", issues
+            )
+            issues.extend(
+                _shape_context_issues(
+                    definition, shapes, f"/groups/{gi}/definition/data"
+                )
             )
             _pos_cycle_issues(
                 definition.get("rebars") or [],

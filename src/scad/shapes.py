@@ -7,6 +7,8 @@ from typing import Any
 
 from scad.expr import evaluate
 
+SUPPORTED_BUILDERS = {"straight", "helix", "ring"}
+
 
 @dataclass(frozen=True)
 class Centerline:
@@ -213,7 +215,12 @@ def build_centerline(
             meta={"outer_diameter": outer, "lap": lap},
         )
 
-    raise ValueError(f"Jenis builder tidak didukung: '{btype}'")
+    code = shape_def.get("code", "(tanpa kode)")
+    supported = ", ".join(sorted(SUPPORTED_BUILDERS))
+    raise ValueError(
+        f"Bentuk '{code}' memakai builder '{btype}' yang belum didukung; "
+        f"builder yang didukung: {supported}"
+    )
 
 
 def cut_length_formula(

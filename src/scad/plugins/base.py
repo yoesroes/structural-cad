@@ -20,8 +20,16 @@ class ElementPlugin(ABC):
         """JSON Schema objek parameter (setara $defs di scad.schema.json)."""
 
     def default_params(self) -> dict[str, Any]:
-        """Nilai awal parameter yang valid; bukan rekomendasi desain."""
+        """Nilai awal teknis untuk membuat dokumen elemen valid."""
         raise NotImplementedError("Plugin harus menyediakan default_params()")
+
+    def allowed_shapes(self, features: set[str]) -> list[str]:
+        """Kode bentuk tulangan utama yang tersedia untuk fitur elemen."""
+        raise NotImplementedError("Plugin harus menyediakan allowed_shapes()")
+
+    def bursting_shapes(self) -> list[str]:
+        """Kode bentuk bursting steel yang dapat ditawarkan plugin."""
+        raise NotImplementedError("Plugin harus menyediakan bursting_shapes()")
 
     @abstractmethod
     def faces(self) -> list[str]:
